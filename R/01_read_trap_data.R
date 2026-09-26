@@ -19,13 +19,32 @@
 #   These two codes were read off the data; confirm their exact definition in
 #   data/raw/SBWFieldPhenoDatabase/esbwMetadata_v1.odt before publishing.
 #
-# COVERAGE of the Maine light-trap selection (checked 2026-09-26)
-#   643 records, 79 localities, 30 years (1961-1989 and 2016)
-#   535 records carry a daily series -> 10,230 counted trap-nights + 191 "m"
-#   108 records carry only a season total (all day cells "-"): `has_daily` FALSE
-#   season totals agree with the sum of the daily counts in every record with
-#   no missing night; "Millinocket, Maine" 2016 has two records at the same
-#   coordinates and reference (flightID 741 and 754), left unmerged
+# SELECTION (see the configuration block below)
+#   Maine light traps, 1968-1989, season total above 99 moths. The year window
+#   is the overlap with the CaSR reanalysis in data/raw/Weather_Maine; the catch
+#   threshold removes records too small to describe a flight curve.
+#
+# POOLING
+#   Where one trap is reported as separate Male and Female records, the two are
+#   summed night by night into one record before the threshold is applied
+#   (section 4b). In Maine this affects 1980 only: "Marshfield Plot 4"
+#   (flightID 760+761, 281 moths) and "Bare Island" (762+763, 161 moths). The
+#   pooled record keeps the lowest flightID, sex becomes "Male+Female" and
+#   `pooled_from` records the components.
+#
+# COVERAGE of that selection (checked 2026-09-26)
+#   227 records, 49 localities, 22 years; every record has a daily series
+#   5,612 counted trap-nights + 154 nights coded "m"
+#   season totals 100 to 71,730 moths; effort 1 to 45 nights per record, so a
+#   minimum-effort rule is still needed before percentile-based phenology
+#   230 records in the year window fall at or below the threshold (`dropped_small`)
+#   season totals agree with the sum of the daily counts in every retained
+#   record, and no locality-year holds two records after the selection
+#   (the unexplained "Millinocket, Maine" 2016 pair is outside the window)
+#
+#   Before the selection the sheet holds 643 Maine light-trap records at 79
+#   localities over 30 years (1961-1989 and 2016), of which 108 carry only a
+#   season total; widen keep_years / set min_season_total = 0 to see them.
 #
 # OUTPUT (written to data/processed/)
 #   trap_records.rds  one row per trapping record, with sampling effort and the
@@ -56,6 +75,18 @@ ods_file <- file.path("data", "raw", "SBWFieldPhenoDatabase",
 ## Set keep_methods = c("Light trap", "Yard Light") to include both.
 keep_states  <- "ME"
 keep_methods <- "Light trap"
+
+## Analysis window. 1968-1989 is the overlap between the trap record and the
+## CaSR v3.2 reanalysis in data/raw/Weather_Maine (1968-1991): it drops 1961-1967
+## and 2016, for which no gridded weather is available.
+keep_years <- 1968:1989
+
+## Minimum season catch. Records at or below this total are dropped: they carry
+## too few moths to describe a flight curve. With min_season_total = 99 the
+## selection also excludes every season-total-only record (all fall below it)
+## and the whole of 1963-1967 and 2016 (no trap exceeded 99 moths in those
+## years). Set to 0 to keep every record.
+min_season_total <- 99
 
 ## Codes that mean "no count available" in a day cell.
 code_not_sampled <- "-"   # trap not operated / date not reported
@@ -115,7 +146,7 @@ trap_records <- flight_raw %>%
     reference_pointer = referencePointer,
     remarks
   ) %>%
-  filter(state %in% keep_states, method %in% keep_methods)
+  filter(state %in% keep_states, method %in% keep_methods, year %in% keep_years)
 
 if (!all(trap_records$data_type == "Counts")) {
   warning("Records with dataType other than \"Counts\" are included: ",
@@ -180,6 +211,87 @@ trap_daily <- trap_long %>%
   arrange(flightID, doy)
 
 
+## ---- 4b. Pool the sex-split records ----------------------------------------
+## A few localities report the Male and the Female catch of one trap as two
+## records (in Maine: "Marshfield Plot 4" and "Bare Island", both 1980). The
+## trap, not the sex, is the sampling unit here, so the two rows are summed
+## night by night into a single record and the components are removed. Pooling
+## happens before the catch threshold of section 5b, so a trap is judged on its
+## whole catch.
+##
+## Records with sex "-" (the vast majority) are untouched.
+
+sex_split <- trap_records %>%
+  filter(sex %in% c("Male", "Female")) %>%
+  group_by(locality, year, method) %>%
+  filter(n() > 1) %>%
+  ## The pooled record keeps the lowest component flightID; `component_id`
+  ## preserves the original ids, which the group_by() below would otherwise mask.
+  mutate(pooled_id = min(flightID), n_parts = n(), component_id = flightID) %>%
+  ungroup()
+
+## Pooling assumes the components really are one trap: same position, same
+## source table. Report any group where that does not hold.
+inconsistent <- sex_split %>%
+  group_by(pooled_id) %>%
+  filter(n_distinct(latitude) > 1 | n_distinct(longitude) > 1 |
+         n_distinct(reference_pointer) > 1) %>%
+  ungroup()
+if (nrow(inconsistent) > 0) {
+  warning("Sex-split records pooled despite differing position or source: ",
+          paste(unique(inconsistent$locality), collapse = " | "), call. = FALSE)
+}
+
+## Provenance column: the component flightIDs for pooled records, NA otherwise.
+trap_records$pooled_from <- NA_character_
+
+if (nrow(sex_split) > 0) {
+
+  key <- select(sex_split, flightID, pooled_id, n_parts)
+
+  ## Daily counts: sum the sexes on each night. A night counts as "counted"
+  ## only when every component reported a number for it; otherwise the pooled
+  ## value would be a partial sum, so it is marked "missing" instead.
+  pooled_daily <- trap_daily %>%
+    inner_join(key, by = "flightID") %>%
+    group_by(flightID = pooled_id, locality, latitude, longitude,
+             year, date, doy, method, n_parts) %>%
+    summarise(
+      complete = all(status == "counted") & n() == first(n_parts),
+      moths    = if (all(status == "counted") & n() == first(n_parts)) sum(moths) else NA_real_,
+      .groups  = "drop"
+    ) %>%
+    mutate(status = if_else(complete, "counted", "missing"), sex = "Male+Female") %>%
+    select(all_of(names(trap_daily)))
+
+  trap_daily <- trap_daily %>%
+    filter(!flightID %in% key$flightID) %>%
+    bind_rows(pooled_daily) %>%
+    arrange(flightID, doy)
+
+  ## Record metadata: identical across components except the sex and the
+  ## season total, which is summed. `pooled_from` keeps the provenance.
+  pooled_records <- sex_split %>%
+    group_by(flightID = pooled_id) %>%
+    summarise(
+      across(c(referenceID, country, state, locality, latitude, longitude,
+               coord_uncert_km, year, method, data_type, reference_pointer),
+             first),
+      sex               = "Male+Female",
+      moths_year_source = sum(moths_year_source),
+      remarks           = paste(unique(stats::na.omit(remarks)), collapse = " | "),
+      pooled_from       = paste(sort(component_id), collapse = "+"),
+      .groups           = "drop"
+    ) %>%
+    mutate(remarks = if_else(remarks == "", NA_character_, remarks))
+
+  trap_records <- trap_records %>%
+    filter(!flightID %in% key$flightID) %>%
+    bind_rows(pooled_records) %>%
+    arrange(flightID)
+}
+
+
 ## ---- 5. Sampling effort and consistency checks ------------------------------
 
 ## Effort and computed totals per record, next to the workbook's own total.
@@ -195,11 +307,33 @@ effort <- trap_daily %>%
   )
 
 ## `has_daily` separates the records usable for phenology (a daily series) from
-## those that only carry a season total in `moths_year_source`: 108 of the 643
-## Maine light-trap records have every day cell set to "-".
+## those that only carry a season total in `moths_year_source`: in the Maine
+## light-trap set, those records have every day cell set to "-".
 trap_records <- trap_records %>%
   left_join(effort, by = "flightID") %>%
-  mutate(has_daily = !is.na(n_nights))
+  mutate(
+    has_daily    = !is.na(n_nights),
+    ## The workbook total is the reference figure; it equals the sum of the
+    ## daily counts in every record with no missing night (checked below), and
+    ## is the only total available for season-total-only records.
+    season_total = coalesce(moths_year_source, moths_total)
+  )
+
+
+## ---- 5b. Apply the catch threshold -----------------------------------------
+## Records are dropped here, not in section 3, because the threshold is applied
+## to the season total, which is only known once the daily cells are read.
+
+dropped_small <- trap_records %>%
+  filter(season_total <= min_season_total | is.na(season_total)) %>%
+  select(flightID, year, locality, has_daily, n_nights, season_total)
+
+trap_records <- trap_records %>%
+  filter(season_total > min_season_total)
+
+## Keep the two tables in step: trap_daily must hold only the retained records.
+trap_daily <- trap_daily %>%
+  filter(flightID %in% trap_records$flightID)
 
 ## The workbook total should equal the sum of the daily counts whenever no night
 ## is missing. Differences are listed rather than corrected.
@@ -222,11 +356,14 @@ saveRDS(trap_records, file.path("data", "processed", "trap_records.rds"))
 saveRDS(trap_daily,   file.path("data", "processed", "trap_daily.rds"))
 
 message(sprintf(
-  paste0("Trap data read: %d records (%s, %s), %d trap-nights, ",
-         "%d-%d.\n  total mismatches vs workbook: %d | duplicated site-years: %d"),
+  paste0("Trap data read: %d records (%s, %s, %d-%d, season total > %d) ",
+         "at %d localities, %d trap-nights.\n",
+         "  dropped below threshold: %d | total mismatches vs workbook: %d",
+         " | duplicated site-years: %d"),
   nrow(trap_records), paste(keep_states, collapse = "/"),
   paste(keep_methods, collapse = "/"),
+  min(keep_years), max(keep_years), min_season_total,
+  n_distinct(trap_records$locality),
   sum(trap_daily$status == "counted"),
-  min(trap_records$year), max(trap_records$year),
-  nrow(total_mismatch), nrow(duplicate_records)
+  nrow(dropped_small), nrow(total_mismatch), nrow(duplicate_records)
 ))
