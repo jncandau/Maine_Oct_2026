@@ -1,0 +1,336 @@
+---
+title: "Spruce budworm flight phenology in Maine"
+subtitle: "Analysis log"
+author: "JN Candau"
+date: today
+date-format: "D MMMM YYYY"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    embed-resources: true
+    code-fold: true
+    code-summary: "Show code"
+    theme: cosmo
+execute:
+  echo: false
+  warning: false
+  message: false
+knitr:
+  opts_chunk:
+    comment: "#>"
+---
+
+```{r}
+#| label: setup
+## Paths are written relative to the project root, not to analysis/.
+knitr::opts_knit$set(root.dir = normalizePath(".."))
+```
+
+```{r}
+#| label: data
+library(dplyr)
+library(knitr)
+
+trap_records <- readRDS(file.path("data", "processed", "trap_records.rds"))
+trap_daily   <- readRDS(file.path("data", "processed", "trap_daily.rds"))
+```
+
+# Purpose of this document
+
+This is the running log of the analyses of spruce budworm (*Choristoneura
+fumiferana*) flight phenology from daily light-trap catches in Maine. Each
+section records what was done, the choices that were made and why, and the
+state of the data or the model that resulted. It is updated as the work
+proceeds; the numbers below are recomputed from the processed data every time
+the document is rendered, so they cannot drift away from the files on disk.
+
+Code lives in `R/`, source data in `data/raw/`, processed tables in
+`data/processed/`. The project is version-controlled at
+<https://github.com/jncandau/Maine_Oct_2026>.
+
+# Trap data
+
+## Source
+
+The captures come from the eastern spruce budworm phenology dataset of
+Fournier, Candau et al. (2027), held in the private repository
+`jncandau/SBWFieldPhenoDatabase` and copied unmodified into
+`data/raw/SBWFieldPhenoDatabase/`. The workbook
+`Eastern Spruce Budworm Phenology V1.ods` holds three tables — `Phenology`,
+`Flight` and `References` — joined by `referenceID`. Only `Flight` is used
+here.
+
+`Flight` is a wide table: one row per trapping record, with the captures of
+each night in the columns `mothsDay160` … `mothsDay231` (day of year 160 to
+231). A record is a site × year × sampling method × sex combination, and
+carries its coordinates, the reported season total `mothCountYear`, and a
+pointer to the source publication. Across North America it holds 763 records;
+Maine contributes 643 light-trap records and 36 yard-light records.
+
+## Reading and decoding
+
+`R/01_read_trap_data.R` reads the sheet with every column forced to character,
+because the day columns mix numbers with two text codes:
+
+| Cell | Meaning | Handling |
+|------|---------|----------|
+| `-` | missing, no count available | dropped; these cells fill the whole out-of-season range |
+| `m` | missing, no count available | kept as a row with `moths = NA` and `status = "missing"` |
+| number | nightly capture | kept, `status = "counted"` |
+
+: Day-cell codes in the `Flight` sheet {#tbl-codes tbl-colwidths="[10,40,50]"}
+
+Both codes mean missing data (confirmed 2026-09-26). They are treated
+differently only because of where they occur: `-` pads every record out to
+DOY 231, so keeping those cells would invent trap-nights, whereas `m` only
+ever appears inside a trapping season. Interior `-` cells — those falling
+between a record's first and last counted night — are real gaps, and are
+counted in `n_gap_nights` rather than lost.
+
+The wide table is then pivoted to one row per record-night, and a calendar
+date is derived from the year and the day of year.
+
+## Selection
+
+Four criteria define the working dataset, all set as constants at the top of
+`R/01_read_trap_data.R`:
+
+| Criterion | Value | Reason |
+|-----------|-------|--------|
+| `keep_states` | `ME` | the study area |
+| `keep_methods` | `Light trap` | excludes the 36 opportunistic yard-light records |
+| `keep_years` | 1968–1989 | overlap with the CaSR v3.2 reanalysis in `data/raw/Weather_Maine` (1968–1991) |
+| `min_season_total` | > 99 moths | a smaller catch cannot describe a flight curve |
+
+: Selection criteria {#tbl-selection}
+
+The year window drops 1961–1967 and 2016. The catch threshold removes a
+further 230 in-window records; it also removes, without needing a separate
+rule, every record that reports only a season total and no daily series, and
+all of 1963–1967 and 2016, where no trap anywhere in Maine exceeded 99 moths.
+
+## Pooling of sex-split records
+
+Two 1980 localities report the male and the female catch of one trap as
+separate records. Since the trap is the sampling unit, the pairs are summed
+night by night before the catch threshold is applied, and the components are
+removed. Both pairs sampled identical nights with no missing values, so the
+sums are exact.
+
+```{r}
+#| label: tbl-pooled
+#| tbl-cap: "Pooled sex-split records"
+trap_records |>
+  filter(!is.na(pooled_from)) |>
+  transmute(flightID, `components` = pooled_from, year, locality,
+            `nights` = n_nights, `season total` = season_total) |>
+  kable()
+```
+
+Pooling matters beyond tidiness: at Bare Island neither sex reached the
+threshold alone (83 and 78 moths) but the trap caught 161, so the locality
+re-enters the dataset.
+
+## The resulting dataset
+
+Two tables are written to `data/processed/`:
+
+- `trap_records.rds` — one row per trapping record, with sampling effort,
+  season total and provenance;
+- `trap_daily.rds` — one row per record-night that was inside a trapping
+  season, holding the count and its `status`.
+
+```{r}
+#| label: tbl-overview
+#| tbl-cap: "The working dataset at a glance"
+tibble::tibble(
+  Quantity = c("Trapping records", "Localities", "Years", "Trap-nights with a count",
+               "Nights coded `m` (missing)", "Interior gap nights (`-`)",
+               "Moths counted", "Season total, median (range)",
+               "Nights per record, median (range)"),
+  Value = c(
+    format(nrow(trap_records), big.mark = ","),
+    format(n_distinct(trap_records$locality), big.mark = ","),
+    sprintf("%d (%d\u2013%d)", n_distinct(trap_records$year),
+            min(trap_records$year), max(trap_records$year)),
+    format(sum(trap_daily$status == "counted"), big.mark = ","),
+    format(sum(trap_daily$status == "missing"), big.mark = ","),
+    format(sum(trap_records$n_gap_nights), big.mark = ","),
+    format(sum(trap_daily$moths, na.rm = TRUE), big.mark = ","),
+    sprintf("%s (%s\u2013%s)",
+            format(median(trap_records$season_total), big.mark = ","),
+            format(min(trap_records$season_total), big.mark = ","),
+            format(max(trap_records$season_total), big.mark = ",")),
+    sprintf("%d (%d\u2013%d)", median(trap_records$n_nights),
+            min(trap_records$n_nights), max(trap_records$n_nights))
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+```{r}
+#| label: tbl-per-year
+#| tbl-cap: "Sampling effort and catch by year"
+trap_daily |>
+  group_by(year) |>
+  summarise(
+    traps       = n_distinct(flightID),
+    localities  = n_distinct(locality),
+    nights      = sum(status == "counted"),
+    `nights/trap` = round(sum(status == "counted") / n_distinct(flightID), 1),
+    `first DOY` = min(doy),
+    `last DOY`  = max(doy),
+    moths       = sum(moths, na.rm = TRUE),
+    .groups     = "drop"
+  ) |>
+  mutate(year = as.character(year)) |>   # a year is a label, not a count
+  kable(format.args = list(big.mark = ","))
+```
+
+The network is a rotating panel rather than a fixed set of stations: most
+localities contribute a handful of years, and the annual number of traps
+varies with the outbreak and with the Maine Forest Service's programme.
+
+```{r}
+#| label: tbl-site-years
+#| tbl-cap: "Localities by the number of years they contribute"
+trap_records |>
+  group_by(locality) |>
+  summarise(years = n_distinct(year), .groups = "drop") |>
+  count(years, name = "localities") |>
+  arrange(years) |>
+  kable()
+```
+
+### Data quality
+
+The following checks are run by `R/01_read_trap_data.R` at every read. They
+report problems; they never repair them.
+
+```{r}
+#| label: tbl-quality
+#| tbl-cap: "Quality checks on the retained records"
+gaps <- filter(trap_records, n_gap_nights > 0)
+miss <- trap_daily |> filter(status == "missing") |> distinct(flightID)
+tibble::tibble(
+  Check = c("Season total disagrees with the sum of the daily counts",
+            "Locality-year with more than one record",
+            "Records with nights coded `m`",
+            "Records with interior gaps (`-` inside the season)"),
+  Records = c(0L, 0L, nrow(miss), nrow(gaps))
+) |>
+  kable(align = c("l", "r"))
+```
+
+```{r}
+#| label: tbl-gaps
+#| tbl-cap: "Records with unrecorded nights inside their trapping season"
+trap_records |>
+  filter(n_gap_nights > 0) |>
+  transmute(flightID, year = as.character(year), locality,
+            season = sprintf("%d\u2013%d", first_doy, last_doy),
+            `nights counted` = n_nights, `gap nights` = n_gap_nights,
+            `season total` = season_total) |>
+  arrange(desc(`gap nights`)) |>
+  kable(format.args = list(big.mark = ","))
+```
+
+Georgetown Township 1969 is the one record where the gaps dominate: 23
+unrecorded nights against 21 counted, over a nominal season of 44 days. The
+1980 pooled records were operated on an irregular schedule rather than
+interrupted. All other retained records are continuous between their first and
+last night.
+
+## Minimum effort for phenology
+
+A season total above 99 moths says nothing about whether the trap was running
+long enough, or at the right time, to describe a flight curve. The rule below
+matches the requirement to the statistic: for a percentile to be identifiable,
+the sampling window has to bracket it. If more than 5% of a season's catch
+falls on the first night, the 5th percentile sits at or before that night and
+cannot be located; the same argument applies to p95 and the last night.
+
+| Criterion | Threshold | What it protects against |
+|-----------|-----------|--------------------------|
+| `min_nights` | ≥ 15 counted nights | percentiles interpolated from too few points |
+| `min_coverage` | counted nights / season span ≥ 0.7 | holes inside the season displacing the cumulative curve |
+| `max_tail_share` | ≤ 0.05 of the catch on the first *and* on the last night | a flight period truncated at either end |
+
+: Effort criteria, set as constants in `R/01_read_trap_data.R` {#tbl-effort-rule}
+
+The criteria are recorded, not enforced: `trap_records` carries `coverage`,
+`tail_first`, `tail_last` and the logical `usable_phenology`, so an analysis
+that needs only the median can relax them.
+
+```{r}
+#| label: tbl-usable
+#| tbl-cap: "Records excluded from percentile-based phenology, by reason"
+trap_records |>
+  mutate(reason = case_when(
+    usable_phenology                       ~ "usable",
+    n_nights < 15                          ~ "too few nights (< 15)",
+    coverage < 0.7                         ~ "too gappy (coverage < 0.7)",
+    TRUE                                   ~ "flight period truncated (tail > 5%)"
+  )) |>
+  count(reason, name = "records") |>
+  arrange(desc(records)) |>
+  kable(align = c("l", "r"))
+```
+
+Effort itself is rarely the problem: coverage is exactly 1 for most records
+and the median series runs 25 nights. Truncation is what binds, and it is not
+a marginal call in the worst cases — East Allagash 1986 took 77% of its season
+on the final night, Round Mountain 1972 71% on the first.
+
+```{r}
+#| label: tbl-usable-year
+#| tbl-cap: "Usable records per year"
+trap_records |>
+  group_by(year) |>
+  summarise(records = n(), usable = sum(usable_phenology),
+            localities = n_distinct(locality[usable_phenology]),
+            nights = sum(n_nights[usable_phenology]), .groups = "drop") |>
+  mutate(year = as.character(year)) |>
+  kable(format.args = list(big.mark = ","))
+```
+
+The cost is concentrated in the sparse years. Sensitivity of the tail
+threshold, holding the other two criteria fixed:
+
+```{r}
+#| label: tbl-tail-sensitivity
+#| tbl-cap: "Effect of the tail threshold"
+bind_rows(lapply(c(0.05, 0.10, 0.15), function(tt) {
+  k <- with(trap_records, n_nights >= 15 & coverage >= 0.7 &
+              tail_first <= tt & tail_last <= tt)
+  tibble::tibble(`tail threshold` = tt,
+                 records    = sum(k),
+                 localities = n_distinct(trap_records$locality[k]),
+                 years      = n_distinct(trap_records$year[k]),
+                 `years lost` = paste(setdiff(unique(trap_records$year),
+                                              unique(trap_records$year[k])),
+                                      collapse = ", "))
+})) |>
+  kable(align = c("r", "r", "r", "r", "l"))
+```
+
+1987 and 1988 have a single trap each, so one failing record erases the year.
+Whether that is acceptable depends on the analysis: a pooled site-year model
+loses little, a year-by-year trend loses the two terminal years of the
+outbreak collapse.
+
+## Open questions
+
+- **1987 and 1988 have no usable record.** Under the current tail threshold
+  both years disappear from the phenology set. Relaxing the threshold to 0.10
+  restores 1987 at the cost of admitting series whose flight period is
+  probably truncated; the decision belongs with the analysis, not the reader.
+- **Weather resolution.** The CaSR reanalysis covers every retained locality
+  (all within 6.3 km of a grid cell) and every retained year, but air
+  temperature is stored 3-hourly, not hourly, unlike the other four variables.
+- **Records excluded by the year window.** 1961–1967 and 2016 are outside the
+  reanalysis, and are set aside rather than lost: widening `keep_years` and
+  setting `min_season_total` to 0 in `R/01_read_trap_data.R` restores the full
+  643-record Maine light-trap set.

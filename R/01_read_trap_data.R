@@ -92,6 +92,17 @@ keep_years <- 1968:1989
 ## years). Set to 0 to keep every record.
 min_season_total <- 99
 
+## Minimum effort for percentile-based phenology. These do NOT drop records:
+## they define the `usable_phenology` flag in section 5, so that an analysis
+## can relax them. A record qualifies when it has enough counted nights, few
+## enough holes, and a sampling window that brackets the flight period -- no
+## more than `max_tail_share` of the season's catch on its first or its last
+## night. That last threshold should match the most extreme percentile to be
+## estimated: with 0.05, p5 and p95 both fall inside the sampled window.
+min_nights     <- 15
+min_coverage   <- 0.7    # counted nights / (last night - first night + 1)
+max_tail_share <- 0.05
+
 ## Codes that mean "no count available" in a day cell.
 code_not_sampled <- "-"   # trap not operated / date not reported
 code_missing     <- "m"   # date sampled but value missing
@@ -371,6 +382,34 @@ trap_records <- trap_records %>%
   left_join(interior_gaps, by = "flightID") %>%
   mutate(n_gap_nights = coalesce(n_gap_nights, 0L))
 
+## Share of the season's catch taken on the first and on the last counted
+## night. A large share means the trap started after the flight had begun, or
+## stopped before it ended, so the corresponding tail of the flight curve is
+## truncated and its percentiles are not identifiable.
+tail_shares <- trap_daily %>%
+  filter(status == "counted") %>%
+  arrange(flightID, doy) %>%
+  group_by(flightID) %>%
+  summarise(tail_first = first(moths) / sum(moths),
+            tail_last  = last(moths)  / sum(moths),
+            .groups    = "drop")
+
+## Effort diagnostics and the phenology-usability flag. The criteria are kept
+## as columns, so an analysis that needs only the median can relax them.
+## `span` counts every night between the first and the last one the trap was
+## known to be running, so nights coded "m" and interior "-" both lower
+## `coverage`.
+trap_records <- trap_records %>%
+  left_join(tail_shares, by = "flightID") %>%
+  mutate(
+    span             = last_doy - first_doy + 1L,
+    coverage         = n_nights / span,
+    usable_phenology = n_nights >= min_nights &
+                       coverage >= min_coverage &
+                       tail_first <= max_tail_share &
+                       tail_last  <= max_tail_share
+  )
+
 
 ## ---- 6. Write the processed tables -----------------------------------------
 
@@ -381,12 +420,13 @@ saveRDS(trap_daily,   file.path("data", "processed", "trap_daily.rds"))
 message(sprintf(
   paste0("Trap data read: %d records (%s, %s, %d-%d, season total > %d) ",
          "at %d localities, %d trap-nights.\n",
-         "  dropped below threshold: %d | total mismatches vs workbook: %d",
-         " | duplicated site-years: %d"),
+         "  usable for phenology: %d | dropped below threshold: %d",
+         " | total mismatches vs workbook: %d | duplicated site-years: %d"),
   nrow(trap_records), paste(keep_states, collapse = "/"),
   paste(keep_methods, collapse = "/"),
   min(keep_years), max(keep_years), min_season_total,
   n_distinct(trap_records$locality),
   sum(trap_daily$status == "counted"),
+  sum(trap_records$usable_phenology),
   nrow(dropped_small), nrow(total_mismatch), nrow(duplicate_records)
 ))
