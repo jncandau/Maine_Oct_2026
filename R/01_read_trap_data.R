@@ -12,12 +12,16 @@
 #   capture of each day of year from 160 (early June) to 231 (late August).
 #
 # CELL CODES observed in the day columns (character, not numeric):
-#   "-"  no data for that date (trap not operated / not reported)
-#   "m"  date within the trapping period but the value is missing
+#   "-"  missing: no count available for that date
+#   "m"  missing: no count available for that date
 #   else a number, which may be fractional when the record is an average
 #        (see `dataType`); Maine records are all dataType == "Counts".
-#   These two codes were read off the data; confirm their exact definition in
-#   data/raw/SBWFieldPhenoDatabase/esbwMetadata_v1.odt before publishing.
+#   Both codes mean missing data (confirmed 2026-09-26). They are handled
+#   differently only by position, not by meaning: "-" fills the whole
+#   out-of-season range, so "-" cells are dropped and only the trapping period
+#   is kept, while "m" cells always fall inside it and are retained as NA.
+#   Interior "-" cells -- inside the trapping period -- are counted in
+#   `n_gap_nights` so they are not lost.
 #
 # SELECTION (see the configuration block below)
 #   Maine light traps, 1968-1989, season total above 99 moths. The year window
@@ -347,6 +351,25 @@ total_mismatch <- trap_records %>%
 duplicate_records <- trap_records %>%
   count(locality, year, method, sex, name = "n_records") %>%
   filter(n_records > 1)
+
+## Nights with no count inside the trapping period: "-" cells between the first
+## and the last counted night of a record. Both codes mean missing data, so
+## these are real gaps and belong in the effort accounting.
+## For pooled records the pattern is taken from the lowest-id component, whose
+## night set is identical to its partner's (checked in section 4b).
+interior_gaps <- trap_long %>%
+  filter(flightID %in% trap_records$flightID, status == "not_sampled") %>%
+  inner_join(
+    trap_daily %>% group_by(flightID) %>%
+      summarise(lo = min(doy), hi = max(doy), .groups = "drop"),
+    by = "flightID"
+  ) %>%
+  filter(doy > lo, doy < hi) %>%
+  count(flightID, name = "n_gap_nights")
+
+trap_records <- trap_records %>%
+  left_join(interior_gaps, by = "flightID") %>%
+  mutate(n_gap_nights = coalesce(n_gap_nights, 0L))
 
 
 ## ---- 6. Write the processed tables -----------------------------------------
