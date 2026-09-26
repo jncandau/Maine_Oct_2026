@@ -1,0 +1,33 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# ---- OS / editor cruft ------------------------------------------------------
+.DS_Store
+*~
+
+# ---- Data -------------------------------------------------------------------
+# Data files are NOT version-controlled here. data/raw/ holds copies of source
+# datasets owned elsewhere (see README for provenance); data/interim/ and
+# data/processed/ are re-created by the scripts in R/. Directory structure is
+# kept via .gitkeep placeholders.
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# ---- Generated output -------------------------------------------------------
+output/figures/*
+!output/figures/.gitkeep
+output/tables/*
+!output/tables/.gitkeep
+output/models/*
+!output/models/.gitkeep
+
+# ---- Quarto / knitr --------------------------------------------------------
+/.quarto/
+*_cache/
+*_files/
