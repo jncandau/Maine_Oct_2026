@@ -519,3 +519,192 @@ the maritime gradient, not just latitude.
 - **Reanalysis, not stations.** CaSR is a model product on a 10 km grid: the
   cell holding a trap is 0.7–6.3 km from it and represents ~100 km², so the
   extracted series describes the neighbourhood, not the trap clearing.
+
+# Modelled phenology from BioSIM
+
+```{r}
+#| label: biosim-data
+biosim_phenology <- readRDS(file.path("data", "processed", "biosim_phenology.rds"))
+biosim_flight    <- readRDS(file.path("data", "processed", "biosim_flight.rds"))
+```
+
+Alongside the observed catches, spruce budworm seasonal biology was simulated
+at every trap locality-year with **BioSIM**, so that observed and modelled
+flight phenology can be compared on the same dates and the same statistic.
+
+## Model and weather
+
+`R/03_biosim_phenology.R` calls the BioSIM Web API through the `BioSIM` R
+package, which drives a Java client. For each year one request covers the
+localities sampled that year: BioSIM assembles the daily weather for those
+coordinates from its own historical station network and runs
+`Spruce_Budworm_Biology` on it — Régnière's process-oriented model of spruce
+budworm seasonal biology (Régnière 1982, 1983, 1984, 1987, 1990; Régnière &
+You 1991), driven by daily minimum, mean and maximum temperature.
+
+This is a second, independent weather source: the CaSR reanalysis of the
+previous section is not what BioSIM uses. Every simulated day in this run came
+back marked as resting on observed rather than generated weather.
+
+## Parameters
+
+The model takes eight parameters. Seven are left at the server defaults; the
+two mortality switches are turned off.
+
+| Parameter | Default | Used here | Meaning |
+|-----------|---------|-----------|---------|
+| `ApplyMortality` | 1 | **0** | apply natural mortality over the population |
+| `ApplyAdultMortality` | 1 | **0** | (undocumented in the model help) |
+| `CreateEggs` | 0 | 0 | allow more than one generation |
+| `TreeKind` | 0 | 0 | host tree on which the insect develops |
+| `LastSampleDate` | *(empty)* | *(unset)* | date of the last field observation |
+| `ObservedAI` | 0 | 0 | last observed average instar |
+| `Defoliation` | 0 | 0 | (undocumented) |
+| `AdultLongevity` | 0 | 0 | (undocumented) |
+
+: BioSIM parameters for `Spruce_Budworm_Biology` {#tbl-biosim-parms}
+
+Mortality is off because the question here is *when* the stages occur, not how
+many survive. With mortality on, only a few percent of the cohort reaches the
+adult stage, so the flight curve would be estimated from a handful of
+individuals: checked at one Maine locality-year, the season totals are
+`MaleEmergence + FemaleEmergence` = 100% and `MaleFlight + FemaleFlight` = 97%
+with mortality off, against 10% and 6% under the defaults.
+
+`LastSampleDate` and `ObservedAI` are left unset, so the simulations are driven
+by weather alone and are not anchored on any field observation of development.
+
+## What the model returns, and what is kept
+
+The output is daily and everything is a **percentage of the simulated cohort**,
+quantised in steps of 0.25%. Besides the eight stages (`L2o` … `Adults`) it
+reports emergence, flight, oviposition and death, separately for each sex.
+Three quantities are kept, each the sum of the two sexes:
+
+| Series | Definition | Kind |
+|--------|------------|------|
+| `Pupae_mf` | `MalePupae` + `FemalePupae` | stock: percentage present that day |
+| `Adult_mf` | `MaleAdult` + `FemaleAdult` | stock: percentage present that day |
+| `Flight_mf` | `MaleFlight` + `FemaleFlight` | activity: flight that day |
+
+: Series retained from the model output {#tbl-biosim-series}
+
+Only flight is a daily flux, so only its cumulative curve is a genuine
+distribution over the season — and it is the series to compare with trap
+catches. The two stocks are weighted by how long individuals remain in the
+stage and are kept for context. The sex-specific columns reproduce the
+both-sexes columns the model also reports exactly, which is checked at every
+run.
+
+The simulation is repeated ten times per locality-year and the runs are
+averaged, which smooths the 0.25% quantisation of a single run; percentiles are
+unaffected by the choice of averaging over summing.
+
+## The resulting dataset
+
+```{r}
+#| label: tbl-biosim-overview
+#| tbl-cap: "The BioSIM run at a glance"
+tibble::tibble(
+  Quantity = c("Locality-years simulated", "Localities", "Years",
+               "Runs per locality-year", "Rows of daily output",
+               "Days resting on observed weather"),
+  Value = c(
+    format(nrow(biosim_flight), big.mark = ","),
+    n_distinct(biosim_flight$Location),
+    sprintf("%d (%d\u2013%d)", n_distinct(biosim_flight$Year),
+            min(biosim_flight$Year), max(biosim_flight$Year)),
+    sprintf("%d", max(biosim_flight$n_runs)),
+    "829,060 raw / 82,906 averaged",
+    "all"
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+```{r}
+#| label: tbl-biosim-series-summary
+#| tbl-cap: "Modelled phenology, mean over the locality-years"
+biosim_phenology |>
+  mutate(series = factor(series, levels = c("Pupae_mf", "Adult_mf", "Flight_mf"))) |>
+  group_by(series) |>
+  ## The range must be taken before `p50` is replaced by its mean: summarise()
+  ## evaluates its arguments in order, in the same data mask.
+  summarise(`p50 range` = sprintf("%.0f\u2013%.0f", min(p50), max(p50)),
+            `p05` = mean(p05), `p25` = mean(p25), `p50` = mean(p50),
+            `p75` = mean(p75), `p95` = mean(p95),
+            `duration (d)` = mean(duration),
+            .groups = "drop") |>
+  relocate(`p50 range`, .after = `duration (d)`) |>
+  mutate(across(where(is.numeric), ~ round(.x, 1))) |>
+  kable(align = c("l", rep("r", 7)))
+```
+
+Modelled flight is centred on day of year 190 on average — 9 July — and the
+central 90% of it spans a fortnight. Pupation runs about ten days ahead of
+flight, and the adult stock peaks slightly after flight because adults persist
+once mortality is switched off.
+
+The locality-year medians are spread over six weeks (DOY 169 to 210) and all
+227 values differ, so the simulations respond to site and year rather than
+returning a regional average: 1974 alone spans DOY 182 to 210 across its 21
+localities.
+
+## Cohorts that do not finish
+
+With mortality off, a locality-year should end with essentially the whole
+cohort having flown. Not all of them do: part of the cohort fails to complete
+development and is dropped, which shows up as a flight season total well below
+100%. `flight_complete` marks the locality-years that reach at least 90%.
+
+```{r}
+#| label: tbl-biosim-complete
+#| tbl-cap: "Completeness of the simulated cohorts"
+biosim_flight |>
+  mutate(band = case_when(season_pct >= 90 ~ "90% or more (flight_complete)",
+                          season_pct >= 50 ~ "50 to 90%",
+                          TRUE             ~ "below 50%")) |>
+  group_by(band) |>
+  summarise(`locality-years` = n(),
+            `mean p50` = round(mean(p50), 1),
+            `season total, %` = sprintf("%.1f\u2013%.1f", min(season_pct), max(season_pct)),
+            .groups = "drop") |>
+  arrange(desc(`locality-years`)) |>
+  kable(align = c("l", "r", "r", "r"))
+```
+
+```{r}
+#| label: tbl-biosim-incomplete
+#| tbl-cap: "Locality-years whose cohort did not complete flight"
+biosim_flight |>
+  filter(!flight_complete) |>
+  arrange(season_pct) |>
+  transmute(Location, Year = as.character(Year),
+            `season total, %` = round(season_pct, 1),
+            p05 = round(p05, 1), p50 = round(p50, 1), p95 = round(p95, 1)) |>
+  kable(align = c("l", "l", "r", "r", "r", "r"))
+```
+
+Two features of that list matter. It is concentrated at particular sites rather
+than scattered — Clayton Lake is flagged in five separate years — which points
+to a site effect rather than to bad years. And the flagged locality-years are
+*later*, not earlier, than the complete ones, which is the opposite of what one
+would expect if the surviving fraction were the fast developers; it is
+consistent instead with incompleteness arising in cold site-years where
+development runs late. The flag is carried on all three series and nothing is
+dropped: what to do with these locality-years is a decision for the analysis.
+
+## Open questions for the modelled phenology
+
+- **The comparison with the catches is still to be done.** On the three
+  locality-years used to test the script, modelled flight ran one to two weeks
+  ahead of the observed catch window; whether that holds over the whole run is
+  the next question, and the two tables join on locality-year.
+- **Three parameters are undocumented.** `ApplyAdultMortality`, `Defoliation`
+  and `AdultLongevity` have no description in the model help and no stated
+  units. `AdultLongevity = 0` in particular may be what makes the adult stock
+  persist to the end of the year.
+- **Nothing anchors the simulation to observed development.** The model offers
+  `LastSampleDate` and `ObservedAI` for that, and the `Phenology` sheet of the
+  source workbook holds average-instar observations — none of them in Maine,
+  but the option exists for a validation elsewhere.

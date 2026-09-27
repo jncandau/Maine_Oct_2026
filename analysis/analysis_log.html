@@ -2199,6 +2199,15 @@ vertical-align: -.125em;
   </ul></li>
   <li><a href="#open-questions-for-the-weather" id="toc-open-questions-for-the-weather" class="nav-link" data-scroll-target="#open-questions-for-the-weather"><span class="header-section-number">3.4</span> Open questions for the weather</a></li>
   </ul></li>
+  <li><a href="#modelled-phenology-from-biosim" id="toc-modelled-phenology-from-biosim" class="nav-link" data-scroll-target="#modelled-phenology-from-biosim"><span class="header-section-number">4</span> Modelled phenology from BioSIM</a>
+  <ul class="collapse">
+  <li><a href="#model-and-weather" id="toc-model-and-weather" class="nav-link" data-scroll-target="#model-and-weather"><span class="header-section-number">4.1</span> Model and weather</a></li>
+  <li><a href="#parameters" id="toc-parameters" class="nav-link" data-scroll-target="#parameters"><span class="header-section-number">4.2</span> Parameters</a></li>
+  <li><a href="#what-the-model-returns-and-what-is-kept" id="toc-what-the-model-returns-and-what-is-kept" class="nav-link" data-scroll-target="#what-the-model-returns-and-what-is-kept"><span class="header-section-number">4.3</span> What the model returns, and what is kept</a></li>
+  <li><a href="#the-resulting-dataset-2" id="toc-the-resulting-dataset-2" class="nav-link" data-scroll-target="#the-resulting-dataset-2"><span class="header-section-number">4.4</span> The resulting dataset</a></li>
+  <li><a href="#cohorts-that-do-not-finish" id="toc-cohorts-that-do-not-finish" class="nav-link" data-scroll-target="#cohorts-that-do-not-finish"><span class="header-section-number">4.5</span> Cohorts that do not finish</a></li>
+  <li><a href="#open-questions-for-the-modelled-phenology" id="toc-open-questions-for-the-modelled-phenology" class="nav-link" data-scroll-target="#open-questions-for-the-modelled-phenology"><span class="header-section-number">4.6</span> Open questions for the modelled phenology</a></li>
+  </ul></li>
   </ul>
 </nav>
 </div>
@@ -3513,6 +3522,520 @@ Table 17: Climate of the trap localities, as extracted
 <li><strong>Temperature is interpolated, not measured, for two hours in three.</strong> Any night-level analysis that depends on a specific hour — the temperature at dusk, or hours above a flight threshold — inherits the idealised diurnal curve, not the reanalysis. Aggregates over a whole night are much less exposed than instantaneous values.</li>
 <li><strong>Local time is a constant offset.</strong> <code>datetime_est</code> is UTC−5 all year, so it is one hour behind civil time in summer. A series nested by UTC year starts at 19:00 on 31 December of the preceding year in local time.</li>
 <li><strong>Reanalysis, not stations.</strong> CaSR is a model product on a 10 km grid: the cell holding a trap is 0.7–6.3 km from it and represents ~100 km², so the extracted series describes the neighbourhood, not the trap clearing.</li>
+</ul>
+</section>
+</section>
+<section id="modelled-phenology-from-biosim" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> Modelled phenology from BioSIM</h1>
+<p>Alongside the observed catches, spruce budworm seasonal biology was simulated at every trap locality-year with <strong>BioSIM</strong>, so that observed and modelled flight phenology can be compared on the same dates and the same statistic.</p>
+<section id="model-and-weather" class="level2" data-number="4.1">
+<h2 data-number="4.1" class="anchored" data-anchor-id="model-and-weather"><span class="header-section-number">4.1</span> Model and weather</h2>
+<p><code>R/03_biosim_phenology.R</code> calls the BioSIM Web API through the <code>BioSIM</code> R package, which drives a Java client. For each year one request covers the localities sampled that year: BioSIM assembles the daily weather for those coordinates from its own historical station network and runs <code>Spruce_Budworm_Biology</code> on it — Régnière’s process-oriented model of spruce budworm seasonal biology (Régnière 1982, 1983, 1984, 1987, 1990; Régnière &amp; You 1991), driven by daily minimum, mean and maximum temperature.</p>
+<p>This is a second, independent weather source: the CaSR reanalysis of the previous section is not what BioSIM uses. Every simulated day in this run came back marked as resting on observed rather than generated weather.</p>
+</section>
+<section id="parameters" class="level2" data-number="4.2">
+<h2 data-number="4.2" class="anchored" data-anchor-id="parameters"><span class="header-section-number">4.2</span> Parameters</h2>
+<p>The model takes eight parameters. Seven are left at the server defaults; the two mortality switches are turned off.</p>
+<div id="tbl-biosim-parms" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-biosim-parms-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 18: BioSIM parameters for <code>Spruce_Budworm_Biology</code>
+</figcaption>
+<div aria-describedby="tbl-biosim-parms-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 27%">
+<col style="width: 22%">
+<col style="width: 27%">
+<col style="width: 22%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Parameter</th>
+<th>Default</th>
+<th>Used here</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>ApplyMortality</code></td>
+<td>1</td>
+<td><strong>0</strong></td>
+<td>apply natural mortality over the population</td>
+</tr>
+<tr class="even">
+<td><code>ApplyAdultMortality</code></td>
+<td>1</td>
+<td><strong>0</strong></td>
+<td>(undocumented in the model help)</td>
+</tr>
+<tr class="odd">
+<td><code>CreateEggs</code></td>
+<td>0</td>
+<td>0</td>
+<td>allow more than one generation</td>
+</tr>
+<tr class="even">
+<td><code>TreeKind</code></td>
+<td>0</td>
+<td>0</td>
+<td>host tree on which the insect develops</td>
+</tr>
+<tr class="odd">
+<td><code>LastSampleDate</code></td>
+<td><em>(empty)</em></td>
+<td><em>(unset)</em></td>
+<td>date of the last field observation</td>
+</tr>
+<tr class="even">
+<td><code>ObservedAI</code></td>
+<td>0</td>
+<td>0</td>
+<td>last observed average instar</td>
+</tr>
+<tr class="odd">
+<td><code>Defoliation</code></td>
+<td>0</td>
+<td>0</td>
+<td>(undocumented)</td>
+</tr>
+<tr class="even">
+<td><code>AdultLongevity</code></td>
+<td>0</td>
+<td>0</td>
+<td>(undocumented)</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Mortality is off because the question here is <em>when</em> the stages occur, not how many survive. With mortality on, only a few percent of the cohort reaches the adult stage, so the flight curve would be estimated from a handful of individuals: checked at one Maine locality-year, the season totals are <code>MaleEmergence + FemaleEmergence</code> = 100% and <code>MaleFlight + FemaleFlight</code> = 97% with mortality off, against 10% and 6% under the defaults.</p>
+<p><code>LastSampleDate</code> and <code>ObservedAI</code> are left unset, so the simulations are driven by weather alone and are not anchored on any field observation of development.</p>
+</section>
+<section id="what-the-model-returns-and-what-is-kept" class="level2" data-number="4.3">
+<h2 data-number="4.3" class="anchored" data-anchor-id="what-the-model-returns-and-what-is-kept"><span class="header-section-number">4.3</span> What the model returns, and what is kept</h2>
+<p>The output is daily and everything is a <strong>percentage of the simulated cohort</strong>, quantised in steps of 0.25%. Besides the eight stages (<code>L2o</code> … <code>Adults</code>) it reports emergence, flight, oviposition and death, separately for each sex. Three quantities are kept, each the sum of the two sexes:</p>
+<div id="tbl-biosim-series" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-biosim-series-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 19: Series retained from the model output
+</figcaption>
+<div aria-describedby="tbl-biosim-series-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 30%">
+<col style="width: 46%">
+<col style="width: 23%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Series</th>
+<th>Definition</th>
+<th>Kind</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Pupae_mf</code></td>
+<td><code>MalePupae</code> + <code>FemalePupae</code></td>
+<td>stock: percentage present that day</td>
+</tr>
+<tr class="even">
+<td><code>Adult_mf</code></td>
+<td><code>MaleAdult</code> + <code>FemaleAdult</code></td>
+<td>stock: percentage present that day</td>
+</tr>
+<tr class="odd">
+<td><code>Flight_mf</code></td>
+<td><code>MaleFlight</code> + <code>FemaleFlight</code></td>
+<td>activity: flight that day</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Only flight is a daily flux, so only its cumulative curve is a genuine distribution over the season — and it is the series to compare with trap catches. The two stocks are weighted by how long individuals remain in the stage and are kept for context. The sex-specific columns reproduce the both-sexes columns the model also reports exactly, which is checked at every run.</p>
+<p>The simulation is repeated ten times per locality-year and the runs are averaged, which smooths the 0.25% quantisation of a single run; percentiles are unaffected by the choice of averaging over summing.</p>
+</section>
+<section id="the-resulting-dataset-2" class="level2" data-number="4.4">
+<h2 data-number="4.4" class="anchored" data-anchor-id="the-resulting-dataset-2"><span class="header-section-number">4.4</span> The resulting dataset</h2>
+<div class="cell">
+<div id="tbl-biosim-overview" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-biosim-overview-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 20: The BioSIM run at a glance
+</figcaption>
+<div aria-describedby="tbl-biosim-overview-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Quantity</th>
+<th style="text-align: right;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Locality-years simulated</td>
+<td style="text-align: right;">227</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Localities</td>
+<td style="text-align: right;">49</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Years</td>
+<td style="text-align: right;">22 (1968&lt;U+2013&gt;1989)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Runs per locality-year</td>
+<td style="text-align: right;">10</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Rows of daily output</td>
+<td style="text-align: right;">829,060 raw / 82,906 averaged</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Days resting on observed weather</td>
+<td style="text-align: right;">all</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<div class="cell">
+<div id="tbl-biosim-series-summary" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-biosim-series-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 21: Modelled phenology, mean over the locality-years
+</figcaption>
+<div aria-describedby="tbl-biosim-series-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 14%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 19%">
+<col style="width: 22%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">series</th>
+<th style="text-align: right;">p05</th>
+<th style="text-align: right;">p25</th>
+<th style="text-align: right;">p50</th>
+<th style="text-align: right;">p75</th>
+<th style="text-align: right;">p95</th>
+<th style="text-align: right;">duration (d)</th>
+<th style="text-align: right;">p50 range</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Pupae_mf</td>
+<td style="text-align: right;">171.1</td>
+<td style="text-align: right;">175.9</td>
+<td style="text-align: right;">179.5</td>
+<td style="text-align: right;">183.1</td>
+<td style="text-align: right;">189.0</td>
+<td style="text-align: right;">17.8</td>
+<td style="text-align: right;">161&lt;U+2013&gt;196</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Adult_mf</td>
+<td style="text-align: right;">183.2</td>
+<td style="text-align: right;">188.1</td>
+<td style="text-align: right;">192.2</td>
+<td style="text-align: right;">196.3</td>
+<td style="text-align: right;">202.2</td>
+<td style="text-align: right;">19.0</td>
+<td style="text-align: right;">173&lt;U+2013&gt;211</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Flight_mf</td>
+<td style="text-align: right;">183.6</td>
+<td style="text-align: right;">187.4</td>
+<td style="text-align: right;">190.1</td>
+<td style="text-align: right;">193.1</td>
+<td style="text-align: right;">198.5</td>
+<td style="text-align: right;">14.9</td>
+<td style="text-align: right;">169&lt;U+2013&gt;210</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Modelled flight is centred on day of year 190 on average — 9 July — and the central 90% of it spans a fortnight. Pupation runs about ten days ahead of flight, and the adult stock peaks slightly after flight because adults persist once mortality is switched off.</p>
+<p>The locality-year medians are spread over six weeks (DOY 169 to 210) and all 227 values differ, so the simulations respond to site and year rather than returning a regional average: 1974 alone spans DOY 182 to 210 across its 21 localities.</p>
+</section>
+<section id="cohorts-that-do-not-finish" class="level2" data-number="4.5">
+<h2 data-number="4.5" class="anchored" data-anchor-id="cohorts-that-do-not-finish"><span class="header-section-number">4.5</span> Cohorts that do not finish</h2>
+<p>With mortality off, a locality-year should end with essentially the whole cohort having flown. Not all of them do: part of the cohort fails to complete development and is dropped, which shows up as a flight season total well below 100%. <code>flight_complete</code> marks the locality-years that reach at least 90%.</p>
+<div class="cell">
+<div id="tbl-biosim-complete" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-biosim-complete-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 22: Completeness of the simulated cohorts
+</figcaption>
+<div aria-describedby="tbl-biosim-complete-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 42%">
+<col style="width: 21%">
+<col style="width: 12%">
+<col style="width: 23%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">band</th>
+<th style="text-align: right;">locality-years</th>
+<th style="text-align: right;">mean p50</th>
+<th style="text-align: right;">season total, %</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">90% or more (flight_complete)</td>
+<td style="text-align: right;">207</td>
+<td style="text-align: right;">189.8</td>
+<td style="text-align: right;">90.5&lt;U+2013&gt;99.5</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">50 to 90%</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">195.2</td>
+<td style="text-align: right;">54.5&lt;U+2013&gt;90.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">below 50%</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">192.3</td>
+<td style="text-align: right;">2.5&lt;U+2013&gt;45.6</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<div class="cell">
+<div id="tbl-biosim-incomplete" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-biosim-incomplete-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 23: Locality-years whose cohort did not complete flight
+</figcaption>
+<div aria-describedby="tbl-biosim-incomplete-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 55%">
+<col style="width: 5%">
+<col style="width: 18%">
+<col style="width: 6%">
+<col style="width: 6%">
+<col style="width: 6%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Location</th>
+<th style="text-align: left;">Year</th>
+<th style="text-align: right;">season total, %</th>
+<th style="text-align: right;">p05</th>
+<th style="text-align: right;">p50</th>
+<th style="text-align: right;">p95</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Clayton Lake, Maine</td>
+<td style="text-align: left;">1979</td>
+<td style="text-align: right;">2.5</td>
+<td style="text-align: right;">180.3</td>
+<td style="text-align: right;">185.0</td>
+<td style="text-align: right;">201.8</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Camp Dana, Oxbow Road, T9 R5, Maine</td>
+<td style="text-align: left;">1969</td>
+<td style="text-align: right;">19.6</td>
+<td style="text-align: right;">196.5</td>
+<td style="text-align: right;">210.4</td>
+<td style="text-align: right;">213.8</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Clayton Lake, Maine</td>
+<td style="text-align: left;">1982</td>
+<td style="text-align: right;">23.6</td>
+<td style="text-align: right;">186.0</td>
+<td style="text-align: right;">187.6</td>
+<td style="text-align: right;">206.1</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">North Bridgton, Maine</td>
+<td style="text-align: left;">1981</td>
+<td style="text-align: right;">29.0</td>
+<td style="text-align: right;">166.6</td>
+<td style="text-align: right;">172.9</td>
+<td style="text-align: right;">182.7</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">East Allagash Twp. (St. Francis), T17 R11, Maine</td>
+<td style="text-align: left;">1986</td>
+<td style="text-align: right;">31.8</td>
+<td style="text-align: right;">197.5</td>
+<td style="text-align: right;">200.5</td>
+<td style="text-align: right;">207.3</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Meddybemps Township, Maine</td>
+<td style="text-align: left;">1984</td>
+<td style="text-align: right;">36.3</td>
+<td style="text-align: right;">189.8</td>
+<td style="text-align: right;">194.6</td>
+<td style="text-align: right;">201.4</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Ste. Aurelie, Big Six Township, T6 R19, Maine</td>
+<td style="text-align: left;">1979</td>
+<td style="text-align: right;">45.6</td>
+<td style="text-align: right;">192.8</td>
+<td style="text-align: right;">195.4</td>
+<td style="text-align: right;">204.6</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Clayton Lake, Maine</td>
+<td style="text-align: left;">1983</td>
+<td style="text-align: right;">54.5</td>
+<td style="text-align: right;">192.3</td>
+<td style="text-align: right;">194.9</td>
+<td style="text-align: right;">204.8</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Clayton Lake, Maine</td>
+<td style="text-align: left;">1984</td>
+<td style="text-align: right;">63.2</td>
+<td style="text-align: right;">191.2</td>
+<td style="text-align: right;">195.7</td>
+<td style="text-align: right;">203.4</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Bare Island, Maine</td>
+<td style="text-align: left;">1980</td>
+<td style="text-align: right;">75.6</td>
+<td style="text-align: right;">179.9</td>
+<td style="text-align: right;">198.0</td>
+<td style="text-align: right;">203.2</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Ste. Aurelie, Big Six Township, T6 R19, Maine</td>
+<td style="text-align: left;">1984</td>
+<td style="text-align: right;">82.3</td>
+<td style="text-align: right;">195.4</td>
+<td style="text-align: right;">202.0</td>
+<td style="text-align: right;">216.2</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Van Buren Township, Maine</td>
+<td style="text-align: left;">1985</td>
+<td style="text-align: right;">84.8</td>
+<td style="text-align: right;">193.9</td>
+<td style="text-align: right;">197.6</td>
+<td style="text-align: right;">205.9</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Washington Township, Maine</td>
+<td style="text-align: left;">1979</td>
+<td style="text-align: right;">86.2</td>
+<td style="text-align: right;">169.1</td>
+<td style="text-align: right;">180.3</td>
+<td style="text-align: right;">189.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Ste. Aurelie, Big Six Township, T6 R19, Maine</td>
+<td style="text-align: left;">1981</td>
+<td style="text-align: right;">86.7</td>
+<td style="text-align: right;">185.0</td>
+<td style="text-align: right;">196.3</td>
+<td style="text-align: right;">205.6</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Marion Township, Maine</td>
+<td style="text-align: left;">1974</td>
+<td style="text-align: right;">86.9</td>
+<td style="text-align: right;">188.3</td>
+<td style="text-align: right;">195.0</td>
+<td style="text-align: right;">205.6</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Round Mountain, T11 R8, Maine</td>
+<td style="text-align: left;">1972</td>
+<td style="text-align: right;">88.0</td>
+<td style="text-align: right;">193.7</td>
+<td style="text-align: right;">197.4</td>
+<td style="text-align: right;">212.6</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Dennistown / Jackman / Moose River, Maine</td>
+<td style="text-align: left;">1971</td>
+<td style="text-align: right;">88.7</td>
+<td style="text-align: right;">186.3</td>
+<td style="text-align: right;">196.3</td>
+<td style="text-align: right;">204.7</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Meddybemps Township, Maine</td>
+<td style="text-align: left;">1986</td>
+<td style="text-align: right;">89.8</td>
+<td style="text-align: right;">179.7</td>
+<td style="text-align: right;">188.5</td>
+<td style="text-align: right;">197.9</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Clayton Lake, Maine</td>
+<td style="text-align: left;">1980</td>
+<td style="text-align: right;">89.9</td>
+<td style="text-align: right;">184.8</td>
+<td style="text-align: right;">196.5</td>
+<td style="text-align: right;">202.9</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Lower Cupsuptic Township, Maine</td>
+<td style="text-align: left;">1974</td>
+<td style="text-align: right;">90.0</td>
+<td style="text-align: right;">193.0</td>
+<td style="text-align: right;">199.0</td>
+<td style="text-align: right;">213.8</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Two features of that list matter. It is concentrated at particular sites rather than scattered — Clayton Lake is flagged in five separate years — which points to a site effect rather than to bad years. And the flagged locality-years are <em>later</em>, not earlier, than the complete ones, which is the opposite of what one would expect if the surviving fraction were the fast developers; it is consistent instead with incompleteness arising in cold site-years where development runs late. The flag is carried on all three series and nothing is dropped: what to do with these locality-years is a decision for the analysis.</p>
+</section>
+<section id="open-questions-for-the-modelled-phenology" class="level2" data-number="4.6">
+<h2 data-number="4.6" class="anchored" data-anchor-id="open-questions-for-the-modelled-phenology"><span class="header-section-number">4.6</span> Open questions for the modelled phenology</h2>
+<ul>
+<li><strong>The comparison with the catches is still to be done.</strong> On the three locality-years used to test the script, modelled flight ran one to two weeks ahead of the observed catch window; whether that holds over the whole run is the next question, and the two tables join on locality-year.</li>
+<li><strong>Three parameters are undocumented.</strong> <code>ApplyAdultMortality</code>, <code>Defoliation</code> and <code>AdultLongevity</code> have no description in the model help and no stated units. <code>AdultLongevity = 0</code> in particular may be what makes the adult stock persist to the end of the year.</li>
+<li><strong>Nothing anchors the simulation to observed development.</strong> The model offers <code>LastSampleDate</code> and <code>ObservedAI</code> for that, and the <code>Phenology</code> sheet of the source workbook holds average-instar observations — none of them in Maine, but the option exists for a validation elsewhere.</li>
 </ul>
 </section>
 </section>
