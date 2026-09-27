@@ -127,6 +127,22 @@ stopifnot(nrow(model_vs_observed) == nrow(trap_records),
           !any(is.na(model_vs_observed$sim_p50)))
 
 
+## ---- 4b. bayessbw on the same axis as the catches ---------------------------
+## bayessbw predicts pupation, the trap sees flight, so the two are not
+## directly comparable. Adding the median observed pupation-to-catch interval
+## puts them on one axis. The shift is CALIBRATED ON THESE DATA, over the
+## comparable rows only: it removes the mean offset by construction, so
+## `d_p50_bayes` tests whether bayessbw ranks sites and years like the traps
+## do, not whether it predicts the right date.
+
+lag_calibrated <- median(model_vs_observed$lag_bayes[model_vs_observed$comparable])
+
+model_vs_observed <- model_vs_observed %>%
+  mutate(lag_calibrated = lag_calibrated,
+         bayes_pred_p50 = bayes_pupation_p50 + lag_calibrated,
+         d_p50_bayes    = bayes_pred_p50 - obs_p50)
+
+
 ## ---- 5. Write and report ----------------------------------------------------
 
 dir.create(file.path("data", "processed"), showWarnings = FALSE, recursive = TRUE)
@@ -143,6 +159,8 @@ message(sprintf(
          "  correlation of modelled and observed p50: r = %.2f (n = %d)\n",
          "  observed median catch follows predicted pupation by %.1f d ",
          "(bayessbw) and %.1f d (BioSIM)\n",
+         "  bayessbw shifted by that lag: offset sd %.1f d, r = %.2f, and its\n",
+         "    offset correlates with BioSIM's at %.2f\n",
          "  written to %s"),
   nrow(model_vs_observed), nrow(cmp),
   median(cmp$d_p05), median(cmp$d_p50), median(cmp$d_p95),
@@ -150,5 +168,7 @@ message(sprintf(
   mean(cmp$d_p50), sd(cmp$d_p50), min(cmp$d_p50), max(cmp$d_p50),
   cor(cmp$sim_p50, cmp$obs_p50), nrow(cmp),
   median(cmp$lag_bayes), median(cmp$lag_biosim),
+  sd(cmp$d_p50_bayes), cor(cmp$bayes_pred_p50, cmp$obs_p50),
+  cor(cmp$d_p50, cmp$d_p50_bayes),
   out_file
 ))

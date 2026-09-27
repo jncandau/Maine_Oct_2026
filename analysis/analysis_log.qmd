@@ -915,94 +915,132 @@ The average is not the whole story, though.
 
 ```{r}
 #| label: fig-compare
-#| fig-cap: "Modelled and observed median flight date. Left: one point per comparable locality-year, against the 1:1 line. Right: the same offsets against latitude, with an ordinary least-squares fit. Points are shaded by year."
+#| fig-cap: "Two development models against the same observed catches, one point per comparable locality-year (n = 170). BioSIM is its modelled median flight date; bayessbw is its median pupation date plus the 12.9 d median pupation-to-catch interval. That shift is calibrated on these same data, so the bayessbw series sits on the 1:1 line by construction and only its scatter is informative. Left: predicted against observed median date. Right: the same offsets against latitude, with an ordinary least-squares fit per model."
 #| fig-width: 9
-#| fig-height: 4.2
+#| fig-height: 4.4
 library(ggplot2)
 library(patchwork)
+
+model_cols <- c(BioSIM = "#1f6f8b", bayessbw = "#d1670f")
+
+## One row per locality-year and model.
+cmp_long <- bind_rows(
+  transmute(cmp, Location, Year, Latitude, obs = obs_p50,
+            pred = sim_p50,        offset = d_p50,       model = "BioSIM"),
+  transmute(cmp, Location, Year, Latitude, obs = obs_p50,
+            pred = bayes_pred_p50, offset = d_p50_bayes, model = "bayessbw")
+) |>
+  mutate(model = factor(model, levels = names(model_cols)))
 
 base <- theme_minimal(base_size = 10) +
   theme(panel.grid.minor = element_blank(),
         plot.title = element_text(size = 10, face = "plain", hjust = 0),
-        legend.position = "none")
+        legend.title = element_blank(),
+        legend.key.size = unit(0.9, "lines"))
 
-lims <- range(c(cmp$obs_p50, cmp$sim_p50))
+lims <- range(c(cmp_long$obs, cmp_long$pred))
 
-p_scatter <- ggplot(cmp, aes(obs_p50, sim_p50, colour = Year)) +
+p_scatter <- ggplot(cmp_long, aes(obs, pred, colour = model)) +
   geom_abline(slope = 1, intercept = 0, linetype = "22", colour = "grey45") +
-  geom_point(size = 1.9, alpha = 0.85) +
+  geom_point(size = 1.7, alpha = 0.7) +
   annotate("text", x = lims[2], y = lims[2], hjust = 1, vjust = 1.8,
            size = 3, colour = "grey45", label = "1:1") +
-  scale_colour_viridis_c(option = "mako", end = 0.85, direction = -1) +
+  scale_colour_manual(values = model_cols) +
   coord_equal(xlim = lims, ylim = lims) +
-  labs(title = "Site by site the agreement is loose",
+  labs(title = "Site by site both models agree loosely",
        x = "Observed median catch date (DOY)",
-       y = "Modelled median flight date (DOY)")
+       y = "Predicted date (DOY)") +
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.02, 0.98),
+        legend.justification = c(0, 1),
+        legend.background = element_blank())
 
-p_lat <- ggplot(cmp, aes(Latitude, d_p50, colour = Year)) +
+p_lat <- ggplot(cmp_long, aes(Latitude, offset, colour = model, fill = model)) +
   geom_hline(yintercept = 0, colour = "grey45", linetype = "22") +
-  geom_point(size = 1.9, alpha = 0.85) +
+  geom_point(size = 1.7, alpha = 0.5) +
   geom_smooth(method = "lm", formula = y ~ x, se = TRUE,
-              colour = "grey20", fill = "grey80", linewidth = 0.6) +
-  scale_colour_viridis_c(option = "mako", end = 0.85, direction = -1,
-                         guide = guide_colourbar(barheight = 8)) +
-  labs(title = "and the model runs early in the south",
+              linewidth = 0.7, alpha = 0.18) +
+  scale_colour_manual(values = model_cols) +
+  scale_fill_manual(values = model_cols) +
+  labs(title = "and both run early in the south",
        x = "Latitude (\u00b0N)",
-       y = "Model minus observed (d)") +
-  theme(legend.position = "right")
+       y = "Predicted minus observed (d)") +
+  theme(legend.position = "none")
 
-(p_scatter & base) + (p_lat & base + theme(legend.position = "right"))
+(p_scatter & base + theme(legend.position = "inside",
+                          legend.position.inside = c(0.02, 0.98),
+                          legend.justification = c(0, 1))) |
+  (p_lat & base + theme(legend.position = "none"))
 ```
 
 ```{r}
 #| label: tbl-compare-structure
-#| tbl-cap: "Where the agreement is, and where it is not"
+#| tbl-cap: "Where the agreement is, and where it is not. Correlations over the 170 comparable locality-years"
+## The same four correlations for either model, so the columns can be read
+## against each other.
+structure_r <- function(pred, offset) {
+  d <- cmp |> mutate(pred = {{ pred }}, offset = {{ offset }})
+  c(cor(d$pred, d$obs_p50),
+    with(d |> group_by(Year) |> filter(n() >= 5) |>
+           summarise(p = mean(pred), o = mean(obs_p50), .groups = "drop"),
+         cor(p, o)),
+    cor(residuals(lm(pred ~ factor(Year), d)),
+        residuals(lm(obs_p50 ~ factor(Year), d))),
+    cor(d$offset, d$Latitude))
+}
+
 tibble::tibble(
-  Comparison = c("All comparable locality-years",
+  Comparison = c("Predicted against observed, all locality-years",
                  "Year means (years with 5 or more localities)",
                  "Within years, across localities",
                  "Offset against latitude"),
-  `r` = c(
-    cor(cmp$sim_p50, cmp$obs_p50),
-    with(cmp |> group_by(Year) |> filter(n() >= 5) |>
-           summarise(s = mean(sim_p50), o = mean(obs_p50), .groups = "drop"),
-         cor(s, o)),
-    cor(residuals(lm(sim_p50 ~ factor(Year), cmp)),
-        residuals(lm(obs_p50 ~ factor(Year), cmp))),
-    cor(cmp$d_p50, cmp$Latitude)
-  )
+  BioSIM   = structure_r(sim_p50, d_p50),
+  bayessbw = structure_r(bayes_pred_p50, d_p50_bayes)
 ) |>
-  mutate(r = round(r, 2)) |>
-  kable(align = c("l", "r"))
+  mutate(across(where(is.numeric), ~ round(.x, 2))) |>
+  kable(align = c("l", "r", "r"))
 ```
 
-This is the substantive result of the comparison, and it has two halves.
+This is the substantive result of the comparison, and it has three parts.
 
-**The model gets the year right.** Averaged over the localities sampled in a
-year, modelled and observed median dates correlate at 0.83: warm early seasons
-and cold late ones are reproduced, and the six-week span of median flight dates
-across the record is not an artefact of which sites happened to be trapped.
+**Both models get the year right.** Averaged over the localities sampled in a
+year, predicted and observed median dates correlate at 0.83 for BioSIM and
+0.71 for bayessbw: warm early seasons and cold late ones are reproduced, and
+the six-week span of median flight dates across the record is not an artefact
+of which sites happened to be trapped.
 
-**It does not get the site right.** Once the year is removed, the correlation
-across localities within a year collapses to 0.14. Whatever makes one Maine
-locality fly earlier than another in the same summer, the model is not
-capturing it — and the residual is not noise, because it has a clear spatial
-structure: the offset correlates with latitude at 0.49, so the model runs
-early in the south and closer to observed in the north.
+**Neither gets the site right.** Once the year is removed, the correlation
+across localities within a year collapses to 0.14 for BioSIM and 0.06 for
+bayessbw. Whatever makes one Maine locality fly earlier than another in the
+same summer, neither model captures it.
+
+**The residual is not noise, and it is the same residual in both models.**
+It has a clear spatial structure — the offset correlates with latitude at 0.49
+(BioSIM) and 0.39 (bayessbw), so both run early in the south — and the two
+models' offsets correlate with each other at 0.74, locality-year by
+locality-year. That last number is the informative one. The models were fitted
+to different data by different methods and, crucially, were driven by
+different weather: BioSIM interpolates its own station network, bayessbw ran
+on the CaSR grid extracted in @sec-weather. A spatial error common to both is
+therefore unlikely to originate in either weather source. It points instead at
+something both models share — temperature-driven development with no
+site-level modifier — or at something neither of them contains, of which
+immigration is the obvious candidate.
 
 ```{r}
 #| label: tbl-compare-sites
-#| tbl-cap: "Localities with at least three comparable years and a median offset beyond a week"
+#| tbl-cap: "Localities with at least three comparable years and a median offset beyond a week in either model"
 cmp |>
   group_by(Location) |>
   filter(n() >= 3) |>
   summarise(years = n(),
             `latitude` = round(first(Latitude), 2),
-            `median offset, d` = round(median(d_p50), 1),
+            `BioSIM, d`   = round(median(d_p50), 1),
+            `bayessbw, d` = round(median(d_p50_bayes), 1),
             .groups = "drop") |>
-  filter(abs(`median offset, d`) > 7) |>
-  arrange(`median offset, d`) |>
-  kable(align = c("l", "r", "r", "r"))
+  filter(abs(`BioSIM, d`) > 7 | abs(`bayessbw, d`) > 7) |>
+  arrange(`BioSIM, d`) |>
+  kable(align = c("l", "r", "r", "r", "r"))
 ```
 
 The worst-fitting sites are southern and coastal — the same localities that the
@@ -1037,13 +1075,14 @@ to be fitted.
 
 ## Open questions for the comparison
 
-- **The spatial residual is the next problem.** Latitude is a proxy, not an
-  explanation. The candidates are the weather driving the models (BioSIM's
-  station interpolation against the CaSR grid, which the weather section
-  already showed disagree on which sites are coolest), the absence of any
-  site-level host or shading effect in the models, and immigration — Maine
-  catches in these years include moths that flew in from elsewhere, and a
-  locality's catch is not necessarily its own cohort.
+- **The spatial residual is the next problem, and the weather is no longer the
+  prime suspect.** Latitude is a proxy, not an explanation. Because the two
+  models run on different weather and make the same spatial error, the
+  remaining candidates are what they share — temperature-driven development
+  with no site-level host, shading or microclimate modifier — and what neither
+  contains: immigration. Maine catches in these years include moths that flew
+  in from elsewhere, so a locality's catch is not necessarily its own cohort,
+  and an immigration signal would plausibly be strongest in the south.
 - **Trap attraction is not modelled at all.** The observed curve is a catch
   curve. Nightly weather gates flight and gates trapping, and neither is in the
   comparison yet; the hourly CaSR variables extracted for every locality-year —
