@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="JN Candau">
-<meta name="dcterms.date" content="2026-09-26">
+<meta name="dcterms.date" content="2026-09-27">
 
 <title>Spruce budworm flight phenology in Maine</title>
 <style>
@@ -2188,6 +2188,17 @@ vertical-align: -.125em;
   <li><a href="#minimum-effort-for-phenology" id="toc-minimum-effort-for-phenology" class="nav-link" data-scroll-target="#minimum-effort-for-phenology"><span class="header-section-number">2.6</span> Minimum effort for phenology</a></li>
   <li><a href="#open-questions" id="toc-open-questions" class="nav-link" data-scroll-target="#open-questions"><span class="header-section-number">2.7</span> Open questions</a></li>
   </ul></li>
+  <li><a href="#weather-data" id="toc-weather-data" class="nav-link" data-scroll-target="#weather-data"><span class="header-section-number">3</span> Weather data</a>
+  <ul class="collapse">
+  <li><a href="#source-1" id="toc-source-1" class="nav-link" data-scroll-target="#source-1"><span class="header-section-number">3.1</span> Source</a></li>
+  <li><a href="#extraction" id="toc-extraction" class="nav-link" data-scroll-target="#extraction"><span class="header-section-number">3.2</span> Extraction</a></li>
+  <li><a href="#the-resulting-dataset-1" id="toc-the-resulting-dataset-1" class="nav-link" data-scroll-target="#the-resulting-dataset-1"><span class="header-section-number">3.3</span> The resulting dataset</a>
+  <ul class="collapse">
+  <li><a href="#interpolation-of-air-temperature" id="toc-interpolation-of-air-temperature" class="nav-link" data-scroll-target="#interpolation-of-air-temperature"><span class="header-section-number">3.3.1</span> Interpolation of air temperature</a></li>
+  <li><a href="#does-the-weather-look-like-maine" id="toc-does-the-weather-look-like-maine" class="nav-link" data-scroll-target="#does-the-weather-look-like-maine"><span class="header-section-number">3.3.2</span> Does the weather look like Maine?</a></li>
+  </ul></li>
+  <li><a href="#open-questions-for-the-weather" id="toc-open-questions-for-the-weather" class="nav-link" data-scroll-target="#open-questions-for-the-weather"><span class="header-section-number">3.4</span> Open questions for the weather</a></li>
+  </ul></li>
   </ul>
 </nav>
 </div>
@@ -2213,7 +2224,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">26 September 2026</p>
+      <p class="date">27 September 2026</p>
     </div>
   </div>
   
@@ -3233,6 +3244,275 @@ Table 12: Effect of the tail threshold
 <li><strong>1987 and 1988 have no usable record.</strong> Under the current tail threshold both years disappear from the phenology set. Relaxing the threshold to 0.10 restores 1987 at the cost of admitting series whose flight period is probably truncated; the decision belongs with the analysis, not the reader.</li>
 <li><strong>Weather resolution.</strong> The CaSR reanalysis covers every retained locality (all within 6.3 km of a grid cell) and every retained year, but air temperature is stored 3-hourly, not hourly, unlike the other four variables.</li>
 <li><strong>Records excluded by the year window.</strong> 1961–1967 and 2016 are outside the reanalysis, and are set aside rather than lost: widening <code>keep_years</code> and setting <code>min_season_total</code> to 0 in <code>R/01_read_trap_data.R</code> restores the full 643-record Maine light-trap set.</li>
+</ul>
+</section>
+</section>
+<section id="weather-data" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> Weather data</h1>
+<section id="source-1" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="source-1"><span class="header-section-number">3.1</span> Source</h2>
+<p>Weather comes from the ECCC Canadian Surface Reanalysis (<strong>CaSR v3.2</strong>), a ~10 km rotated-pole reanalysis. The two tiles that cover Maine were downloaded from the <a href="https://hpfx.collab.science.gc.ca/~scar700/rcas-casr/download_CaSR_regions_var_period_fr.html">CaSR download page</a> into <code>data/raw/Weather_Maine/</code> — 60 NetCDF files, 4.1 GB, five variables in six four-year periods spanning 1968–1991.</p>
+<div id="tbl-casr-vars" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-casr-vars-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 13: CaSR variables extracted
+</figcaption>
+<div aria-describedby="tbl-casr-vars-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Variable</th>
+<th>Kind</th>
+<th>Meaning</th>
+<th>Units</th>
+<th>Stored</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>TT</code></td>
+<td>analysis</td>
+<td>air temperature at 1.5 m</td>
+<td>°C</td>
+<td>every 3 h</td>
+</tr>
+<tr class="even">
+<td><code>PR0</code></td>
+<td>analysis</td>
+<td>quantity of precipitation</td>
+<td>m</td>
+<td>hourly</td>
+</tr>
+<tr class="odd">
+<td><code>FB</code></td>
+<td>forecast</td>
+<td>downward solar flux at surface</td>
+<td>W m⁻²</td>
+<td>hourly</td>
+</tr>
+<tr class="even">
+<td><code>P0</code></td>
+<td>forecast</td>
+<td>surface pressure</td>
+<td>mb</td>
+<td>hourly</td>
+</tr>
+<tr class="odd">
+<td><code>UVC</code></td>
+<td>forecast</td>
+<td>wind modulus at 10 m</td>
+<td>kts</td>
+<td>hourly</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The reanalysis window is what fixes <code>keep_years</code> in the trap selection: 1968 is the first year with weather, and no trap in 1990 or 1991 was sampled.</p>
+</section>
+<section id="extraction" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="extraction"><span class="header-section-number">3.2</span> Extraction</h2>
+<p><code>R/02_read_weather_data.R</code> takes the locality-years from <code>data/processed/trap_records.rds</code>, projects the trap coordinates onto the rotated-pole grid, assigns each locality to the tile that contains it, and extracts the grid cell holding the trap for every hour of the calendar year.</p>
+<div class="cell">
+<div id="tbl-weather-grid" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-weather-grid-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 14: Trap localities on the CaSR grid
+</figcaption>
+<div aria-describedby="tbl-weather-grid-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Quantity</th>
+<th style="text-align: right;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Locality-years extracted</td>
+<td style="text-align: right;">227</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Localities</td>
+<td style="text-align: right;">49</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Years</td>
+<td style="text-align: right;">22 (1968&lt;U+2013&gt;1989)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Hourly rows</td>
+<td style="text-align: right;">1,989,744</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Southern tile / northern tile</td>
+<td style="text-align: right;">30 / 19</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Distance to the grid cell used (km)</td>
+<td style="text-align: right;">0.7 to 6.3, median 3.9</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Two details of the file layout needed care.</p>
+<p><em>The period files are not aligned on calendar years.</em> Each spans 31 December 13:00 UTC of the year before its period to 31 December 12:00 UTC of its last year, so the final 11 hours of 1971, 1975, 1979, 1983 and 1987 sit in the <em>next</em> period file. Selecting layers by year within a single file silently returns 8,749-hour years; the script reads both files for those years.</p>
+<p><em>The tiles are read separately.</em> Each locality is extracted from the one tile that covers it, rather than merging two 35,064-layer rasters per variable and period.</p>
+</section>
+<section id="the-resulting-dataset-1" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="the-resulting-dataset-1"><span class="header-section-number">3.3</span> The resulting dataset</h2>
+<p><code>data/processed/weather_hourly.rds</code> (51 MB) holds one row per locality-year with a nested <code>Weather</code> tibble: <code>datetime</code> (UTC), <code>datetime_est</code> (local standard time, UTC−5 all year), the interpolated <code>Temp</code>, the raw <code>TT</code>, and <code>PR0</code>, <code>FB</code>, <code>P0</code>, <code>UVC</code>.</p>
+<div class="cell">
+<div id="tbl-weather-complete" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-weather-complete-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 15: Completeness of the extracted series
+</figcaption>
+<div aria-describedby="tbl-weather-complete-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 66%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Check</th>
+<th style="text-align: right;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Locality-years with a complete calendar year of hours</td>
+<td style="text-align: right;">227 of 227</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Hours with no interpolated temperature</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Hours with a measured (3-hourly) temperature</td>
+<td style="text-align: right;">663,248 (33% of all hours)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Hours missing any of PR0, FB, P0, UVC</td>
+<td style="text-align: right;">0</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<section id="interpolation-of-air-temperature" class="level3" data-number="3.3.1">
+<h3 data-number="3.3.1" class="anchored" data-anchor-id="interpolation-of-air-temperature"><span class="header-section-number">3.3.1</span> Interpolation of air temperature</h3>
+<p>Temperature is stored every three hours, so two hours in three are filled with <code>chillR::interpolate_gaps_hourly()</code>, which fits an idealised daily temperature curve to the daily minima and maxima — hence the latitude argument — and interpolates the residuals. The measured values are left untouched, which is worth verifying rather than assuming:</p>
+<div class="cell">
+<div id="tbl-weather-interp" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-weather-interp-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 16: Interpolation audit
+</figcaption>
+<div aria-describedby="tbl-weather-interp-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 84%">
+<col style="width: 15%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Quantity</th>
+<th style="text-align: right;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Largest |interpolated - measured| at a measured hour (&lt;U+00B0&gt;C)</td>
+<td style="text-align: right;">5.15e-14</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Share of hours interpolated</td>
+<td style="text-align: right;">67%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Temperature range over all locality-years (&lt;U+00B0&gt;C)</td>
+<td style="text-align: right;">-35.6 to 39.9</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>The deviation at measured hours is floating-point noise, so <code>Temp</code> reproduces <code>TT</code> exactly where <code>TT</code> exists and only fills the gaps between.</p>
+</section>
+<section id="does-the-weather-look-like-maine" class="level3" data-number="3.3.2">
+<h3 data-number="3.3.2" class="anchored" data-anchor-id="does-the-weather-look-like-maine"><span class="header-section-number">3.3.2</span> Does the weather look like Maine?</h3>
+<div class="cell">
+<div id="tbl-weather-climate" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-weather-climate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 17: Climate of the trap localities, as extracted
+</figcaption>
+<div aria-describedby="tbl-weather-climate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 72%">
+<col style="width: 27%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Quantity</th>
+<th style="text-align: right;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Mean July temperature (&lt;U+00B0&gt;C)</td>
+<td style="text-align: right;">16.0 to 22.6</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Mean temperature over the flight window, DOY 160-230 (&lt;U+00B0&gt;C)</td>
+<td style="text-align: right;">15.3 to 21.6</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Correlation of mean July temperature with latitude</td>
+<td style="text-align: right;">-0.46</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Annual precipitation (mm)</td>
+<td style="text-align: right;">802 to 1804, median 1125</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Mean wind speed at 10 m (kts)</td>
+<td style="text-align: right;">3.3 to 10.3</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Summer temperature falls towards the north, but latitude alone orders the localities poorly. The coolest Julys belong to coastal and island sites — Bare Island 17.2 °C at 44.6° N, Georgetown 17.4 °C at 43.8° N, Steuben 17.6 °C at 44.5° N — all cooler than Estcourt, 21.0 °C on the Québec border at 47.4° N. Any temperature-driven model of flight timing therefore has to carry the maritime gradient, not just latitude.</p>
+</section>
+</section>
+<section id="open-questions-for-the-weather" class="level2" data-number="3.4">
+<h2 data-number="3.4" class="anchored" data-anchor-id="open-questions-for-the-weather"><span class="header-section-number">3.4</span> Open questions for the weather</h2>
+<ul>
+<li><strong>Temperature is interpolated, not measured, for two hours in three.</strong> Any night-level analysis that depends on a specific hour — the temperature at dusk, or hours above a flight threshold — inherits the idealised diurnal curve, not the reanalysis. Aggregates over a whole night are much less exposed than instantaneous values.</li>
+<li><strong>Local time is a constant offset.</strong> <code>datetime_est</code> is UTC−5 all year, so it is one hour behind civil time in summer. A series nested by UTC year starts at 19:00 on 31 December of the preceding year in local time.</li>
+<li><strong>Reanalysis, not stations.</strong> CaSR is a model product on a 10 km grid: the cell holding a trap is 0.7–6.3 km from it and represents ~100 km², so the extracted series describes the neighbourhood, not the trap clearing.</li>
 </ul>
 </section>
 </section>

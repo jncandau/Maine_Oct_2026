@@ -32,6 +32,7 @@ knitr::opts_knit$set(root.dir = normalizePath(".."))
 #| label: data
 library(dplyr)
 library(knitr)
+library(lubridate)   # month(), yday(), leap_year() in the weather section
 
 trap_records <- readRDS(file.path("data", "processed", "trap_records.rds"))
 trap_daily   <- readRDS(file.path("data", "processed", "trap_daily.rds"))
@@ -334,3 +335,187 @@ outbreak collapse.
   reanalysis, and are set aside rather than lost: widening `keep_years` and
   setting `min_season_total` to 0 in `R/01_read_trap_data.R` restores the full
   643-record Maine light-trap set.
+
+# Weather data
+
+```{r}
+#| label: weather-data
+weather_hourly <- readRDS(file.path("data", "processed", "weather_hourly.rds"))
+
+## One summary pass over the nested hourly tables; every weather figure below
+## is taken from it.
+wsum <- weather_hourly |>
+  rowwise() |>
+  summarise(
+    Location, Year, Latitude, tile,
+    hours       = nrow(Weather),
+    na_temp     = sum(is.na(Weather$Temp)),
+    tt_measured = sum(!is.na(Weather$TT)),
+    max_dev     = max(abs(Weather$Temp - Weather$TT), na.rm = TRUE),
+    tmin        = min(Weather$Temp),
+    tmax        = max(Weather$Temp),
+    july_mean   = mean(Weather$Temp[month(Weather$datetime) == 7]),
+    season_mean = mean(Weather$Temp[yday(Weather$datetime) %in% 160:230]),
+    rain_mm     = sum(Weather$PR0) * 1000,
+    wind_mean   = mean(Weather$UVC),
+    .groups     = "drop"
+  )
+```
+
+## Source
+
+Weather comes from the ECCC Canadian Surface Reanalysis (**CaSR v3.2**), a
+~10 km rotated-pole reanalysis. The two tiles that cover Maine were downloaded
+from the [CaSR download
+page](https://hpfx.collab.science.gc.ca/~scar700/rcas-casr/download_CaSR_regions_var_period_fr.html)
+into `data/raw/Weather_Maine/` — 60 NetCDF files, 4.1 GB, five variables in
+six four-year periods spanning 1968–1991.
+
+| Variable | Kind | Meaning | Units | Stored |
+|----------|------|---------|-------|--------|
+| `TT` | analysis | air temperature at 1.5 m | °C | every 3 h |
+| `PR0` | analysis | quantity of precipitation | m | hourly |
+| `FB` | forecast | downward solar flux at surface | W m⁻² | hourly |
+| `P0` | forecast | surface pressure | mb | hourly |
+| `UVC` | forecast | wind modulus at 10 m | kts | hourly |
+
+: CaSR variables extracted {#tbl-casr-vars}
+
+The reanalysis window is what fixes `keep_years` in the trap selection: 1968 is
+the first year with weather, and no trap in 1990 or 1991 was sampled.
+
+## Extraction
+
+`R/02_read_weather_data.R` takes the locality-years from
+`data/processed/trap_records.rds`, projects the trap coordinates onto the
+rotated-pole grid, assigns each locality to the tile that contains it, and
+extracts the grid cell holding the trap for every hour of the calendar year.
+
+```{r}
+#| label: tbl-weather-grid
+#| tbl-cap: "Trap localities on the CaSR grid"
+tibble::tibble(
+  Quantity = c("Locality-years extracted", "Localities", "Years",
+               "Hourly rows", "Southern tile / northern tile",
+               "Distance to the grid cell used (km)"),
+  Value = c(
+    format(nrow(wsum), big.mark = ","),
+    n_distinct(wsum$Location),
+    sprintf("%d (%d\u2013%d)", n_distinct(wsum$Year), min(wsum$Year), max(wsum$Year)),
+    format(sum(wsum$hours), big.mark = ","),
+    ## tiles are named by rlat band: 351-385 is the southern one, 386-420 the northern
+    paste(as.integer(table(wsum$tile[!duplicated(wsum$Location)])), collapse = " / "),
+    "0.7 to 6.3, median 3.9"
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+Two details of the file layout needed care.
+
+*The period files are not aligned on calendar years.* Each spans 31 December
+13:00 UTC of the year before its period to 31 December 12:00 UTC of its last
+year, so the final 11 hours of 1971, 1975, 1979, 1983 and 1987 sit in the
+*next* period file. Selecting layers by year within a single file silently
+returns 8,749-hour years; the script reads both files for those years.
+
+*The tiles are read separately.* Each locality is extracted from the one tile
+that covers it, rather than merging two 35,064-layer rasters per variable and
+period.
+
+## The resulting dataset
+
+`data/processed/weather_hourly.rds` (51 MB) holds one row per locality-year
+with a nested `Weather` tibble: `datetime` (UTC), `datetime_est` (local
+standard time, UTC−5 all year), the interpolated `Temp`, the raw `TT`, and
+`PR0`, `FB`, `P0`, `UVC`.
+
+```{r}
+#| label: tbl-weather-complete
+#| tbl-cap: "Completeness of the extracted series"
+tibble::tibble(
+  Check = c("Locality-years with a complete calendar year of hours",
+            "Hours with no interpolated temperature",
+            "Hours with a measured (3-hourly) temperature",
+            "Hours missing any of PR0, FB, P0, UVC"),
+  Value = c(
+    sprintf("%d of %d", sum(wsum$hours %in% c(8760L, 8784L)), nrow(wsum)),
+    format(sum(wsum$na_temp), big.mark = ","),
+    sprintf("%s (%.0f%% of all hours)", format(sum(wsum$tt_measured), big.mark = ","),
+            100 * sum(wsum$tt_measured) / sum(wsum$hours)),
+    "0"
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+### Interpolation of air temperature
+
+Temperature is stored every three hours, so two hours in three are filled with
+`chillR::interpolate_gaps_hourly()`, which fits an idealised daily temperature
+curve to the daily minima and maxima — hence the latitude argument — and
+interpolates the residuals. The measured values are left untouched, which is
+worth verifying rather than assuming:
+
+```{r}
+#| label: tbl-weather-interp
+#| tbl-cap: "Interpolation audit"
+tibble::tibble(
+  Quantity = c("Largest |interpolated - measured| at a measured hour (°C)",
+               "Share of hours interpolated",
+               "Temperature range over all locality-years (°C)"),
+  Value = c(
+    format(max(wsum$max_dev), digits = 3, scientific = TRUE),
+    sprintf("%.0f%%", 100 * (1 - sum(wsum$tt_measured) / sum(wsum$hours))),
+    sprintf("%.1f to %.1f", min(wsum$tmin), max(wsum$tmax))
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+The deviation at measured hours is floating-point noise, so `Temp` reproduces
+`TT` exactly where `TT` exists and only fills the gaps between.
+
+### Does the weather look like Maine?
+
+```{r}
+#| label: tbl-weather-climate
+#| tbl-cap: "Climate of the trap localities, as extracted"
+tibble::tibble(
+  Quantity = c("Mean July temperature (°C)",
+               "Mean temperature over the flight window, DOY 160-230 (°C)",
+               "Correlation of mean July temperature with latitude",
+               "Annual precipitation (mm)",
+               "Mean wind speed at 10 m (kts)"),
+  Value = c(
+    sprintf("%.1f to %.1f", min(wsum$july_mean), max(wsum$july_mean)),
+    sprintf("%.1f to %.1f", min(wsum$season_mean), max(wsum$season_mean)),
+    sprintf("%.2f", cor(wsum$july_mean, wsum$Latitude)),
+    sprintf("%d to %d, median %d", round(min(wsum$rain_mm)), round(max(wsum$rain_mm)),
+            round(median(wsum$rain_mm))),
+    sprintf("%.1f to %.1f", min(wsum$wind_mean), max(wsum$wind_mean))
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+Summer temperature falls towards the north, but latitude alone orders the
+localities poorly. The coolest Julys belong to coastal and island sites —
+Bare Island 17.2 °C at 44.6° N, Georgetown 17.4 °C at 43.8° N, Steuben
+17.6 °C at 44.5° N — all cooler than Estcourt, 21.0 °C on the Québec border at
+47.4° N. Any temperature-driven model of flight timing therefore has to carry
+the maritime gradient, not just latitude.
+
+## Open questions for the weather
+
+- **Temperature is interpolated, not measured, for two hours in three.** Any
+  night-level analysis that depends on a specific hour — the temperature at
+  dusk, or hours above a flight threshold — inherits the idealised diurnal
+  curve, not the reanalysis. Aggregates over a whole night are much less
+  exposed than instantaneous values.
+- **Local time is a constant offset.** `datetime_est` is UTC−5 all year, so it
+  is one hour behind civil time in summer. A series nested by UTC year starts
+  at 19:00 on 31 December of the preceding year in local time.
+- **Reanalysis, not stations.** CaSR is a model product on a 10 km grid: the
+  cell holding a trap is 0.7–6.3 km from it and represents ~100 km², so the
+  extracted series describes the neighbourhood, not the trap clearing.
