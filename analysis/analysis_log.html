@@ -2222,7 +2222,9 @@ vertical-align: -.125em;
   <li><a href="#sec-lag" id="toc-sec-lag" class="nav-link" data-scroll-target="#sec-lag"><span class="header-section-number">6.4</span> Would a degree-day pupal stage help?</a></li>
   <li><a href="#why-no-development-function-would-help" id="toc-why-no-development-function-would-help" class="nav-link" data-scroll-target="#why-no-development-function-would-help"><span class="header-section-number">6.5</span> Why no development function would help</a></li>
   <li><a href="#what-the-long-intervals-look-like" id="toc-what-the-long-intervals-look-like" class="nav-link" data-scroll-target="#what-the-long-intervals-look-like"><span class="header-section-number">6.6</span> What the long intervals look like</a></li>
-  <li><a href="#open-questions-for-the-comparison" id="toc-open-questions-for-the-comparison" class="nav-link" data-scroll-target="#open-questions-for-the-comparison"><span class="header-section-number">6.7</span> Open questions for the comparison</a></li>
+  <li><a href="#latitude-or-how-many-moths-were-caught" id="toc-latitude-or-how-many-moths-were-caught" class="nav-link" data-scroll-target="#latitude-or-how-many-moths-were-caught"><span class="header-section-number">6.7</span> Latitude, or how many moths were caught?</a></li>
+  <li><a href="#is-the-catch-size-effect-precision-or-biology" id="toc-is-the-catch-size-effect-precision-or-biology" class="nav-link" data-scroll-target="#is-the-catch-size-effect-precision-or-biology"><span class="header-section-number">6.8</span> Is the catch-size effect precision, or biology?</a></li>
+  <li><a href="#open-questions-for-the-comparison" id="toc-open-questions-for-the-comparison" class="nav-link" data-scroll-target="#open-questions-for-the-comparison"><span class="header-section-number">6.9</span> Open questions for the comparison</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -4376,6 +4378,11 @@ Table 29: Where the agreement is, and where it is not. Correlations over the 17
 <td style="text-align: right;">0.49</td>
 <td style="text-align: right;">0.39</td>
 </tr>
+<tr class="odd">
+<td style="text-align: left;">Offset against log10 season total</td>
+<td style="text-align: right;">0.28</td>
+<td style="text-align: right;">0.17</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -4386,7 +4393,7 @@ Table 29: Where the agreement is, and where it is not. Correlations over the 17
 <p>This is the substantive result of the comparison, and it has three parts.</p>
 <p><strong>Both models get the year right.</strong> Averaged over the localities sampled in a year, predicted and observed median dates correlate at 0.83 for BioSIM and 0.71 for bayessbw: warm early seasons and cold late ones are reproduced, and the six-week span of median flight dates across the record is not an artefact of which sites happened to be trapped.</p>
 <p><strong>Neither gets the site right.</strong> Once the year is removed, the correlation across localities within a year collapses to 0.14 for BioSIM and 0.06 for bayessbw. Whatever makes one Maine locality fly earlier than another in the same summer, neither model captures it.</p>
-<p><strong>The residual is not noise, and it is the same residual in both models.</strong> It has a clear spatial structure — the offset correlates with latitude at 0.49 (BioSIM) and 0.39 (bayessbw), so both run early in the south — and the two models’ offsets correlate with each other at 0.74, locality-year by locality-year. That last number is the informative one. The models were fitted to different data by different methods and, crucially, were driven by different weather: BioSIM interpolates its own station network, bayessbw ran on the CaSR grid extracted in <a href="#sec-weather" class="quarto-xref">Section 3</a>. A spatial error common to both is therefore unlikely to originate in either weather source. It points instead at something both models share — temperature-driven development with no site-level modifier — or at something neither of them contains, of which immigration is the obvious candidate.</p>
+<p><strong>The residual is not noise, and it is the same residual in both models.</strong> It has a clear spatial structure — the offset correlates with latitude at 0.49 (BioSIM) and 0.39 (bayessbw), so both run early in the south, and more weakly with the size of the catch (0.28 and 0.17; the two are disentangled below) — and the two models’ offsets correlate with each other at 0.74, locality-year by locality-year. That last number is the informative one. The models were fitted to different data by different methods and, crucially, were driven by different weather: BioSIM interpolates its own station network, bayessbw ran on the CaSR grid extracted in <a href="#sec-weather" class="quarto-xref">Section 3</a>. A spatial error common to both is therefore unlikely to originate in either weather source. It points instead at something both models share — temperature-driven development with no site-level modifier — or at something neither of them contains, of which immigration is the obvious candidate.</p>
 <div class="cell">
 <div id="tbl-compare-sites" class="cell quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
@@ -4397,17 +4404,19 @@ Table 30: Localities with at least three comparable years and a median offset b
 <div class="cell-output-display">
 <table class="cell caption-top table table-sm table-striped small">
 <colgroup>
-<col style="width: 55%">
-<col style="width: 7%">
+<col style="width: 47%">
+<col style="width: 6%">
+<col style="width: 9%">
+<col style="width: 13%">
 <col style="width: 10%">
 <col style="width: 12%">
-<col style="width: 14%">
 </colgroup>
 <thead>
 <tr class="header">
 <th style="text-align: left;">Location</th>
 <th style="text-align: right;">years</th>
 <th style="text-align: right;">latitude</th>
+<th style="text-align: right;">median catch</th>
 <th style="text-align: right;">BioSIM, d</th>
 <th style="text-align: right;">bayessbw, d</th>
 </tr>
@@ -4417,6 +4426,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">Brunswick Township, Maine</td>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">43.89</td>
+<td style="text-align: right;">320.0</td>
 <td style="text-align: right;">-18.7</td>
 <td style="text-align: right;">-14.7</td>
 </tr>
@@ -4424,6 +4434,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">Blue Hill Township, Maine</td>
 <td style="text-align: right;">6</td>
 <td style="text-align: right;">44.44</td>
+<td style="text-align: right;">377.5</td>
 <td style="text-align: right;">-16.6</td>
 <td style="text-align: right;">-4.0</td>
 </tr>
@@ -4431,6 +4442,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">Mount Vernon Township, Maine</td>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">44.46</td>
+<td style="text-align: right;">216.0</td>
 <td style="text-align: right;">-15.9</td>
 <td style="text-align: right;">-14.3</td>
 </tr>
@@ -4438,6 +4450,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">Millinocket, Maine</td>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">45.65</td>
+<td style="text-align: right;">475.0</td>
 <td style="text-align: right;">-14.3</td>
 <td style="text-align: right;">-10.6</td>
 </tr>
@@ -4445,6 +4458,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">St. Francis Township, Maine</td>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">47.14</td>
+<td style="text-align: right;">375.0</td>
 <td style="text-align: right;">-8.5</td>
 <td style="text-align: right;">-1.8</td>
 </tr>
@@ -4452,6 +4466,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">Milton Township, Maine</td>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">44.45</td>
+<td style="text-align: right;">436.0</td>
 <td style="text-align: right;">-8.4</td>
 <td style="text-align: right;">0.2</td>
 </tr>
@@ -4459,6 +4474,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">Enfield Township, Maine</td>
 <td style="text-align: right;">4</td>
 <td style="text-align: right;">45.27</td>
+<td style="text-align: right;">401.5</td>
 <td style="text-align: right;">-7.4</td>
 <td style="text-align: right;">-4.1</td>
 </tr>
@@ -4466,6 +4482,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">North Bridgton, Maine</td>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">44.10</td>
+<td style="text-align: right;">140.0</td>
 <td style="text-align: right;">-6.5</td>
 <td style="text-align: right;">-7.1</td>
 </tr>
@@ -4473,6 +4490,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">Pittston Farm, T2 R4, Maine</td>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">45.89</td>
+<td style="text-align: right;">792.0</td>
 <td style="text-align: right;">2.0</td>
 <td style="text-align: right;">8.3</td>
 </tr>
@@ -4480,6 +4498,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">Ste. Aurelie, Big Six Township, T6 R19, Maine</td>
 <td style="text-align: right;">4</td>
 <td style="text-align: right;">46.17</td>
+<td style="text-align: right;">6909.0</td>
 <td style="text-align: right;">7.6</td>
 <td style="text-align: right;">2.6</td>
 </tr>
@@ -4487,6 +4506,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 <td style="text-align: left;">St. Cyprien, T8 R19 (Somerset Co.), Maine</td>
 <td style="text-align: right;">3</td>
 <td style="text-align: right;">46.33</td>
+<td style="text-align: right;">923.0</td>
 <td style="text-align: right;">7.7</td>
 <td style="text-align: right;">4.2</td>
 </tr>
@@ -4497,7 +4517,7 @@ Table 30: Localities with at least three comparable years and a median offset b
 </figure>
 </div>
 </div>
-<p>The worst-fitting sites are southern and coastal — the same localities that the weather section found to have the coolest Julys in the dataset despite their latitude. A model that is too early there is a model whose development is running too fast on those temperature series.</p>
+<p>The worst-fitting sites are southern and coastal — the same localities that the weather section found to have the coolest Julys in the dataset despite their latitude. A model that is too early there is a model whose development is running too fast on those temperature series. They are also the localities that catch the fewest moths, which is a second candidate explanation and is separated from latitude below.</p>
 </section>
 <section id="from-pupation-to-flight" class="level2" data-number="6.3">
 <h2 data-number="6.3" class="anchored" data-anchor-id="from-pupation-to-flight"><span class="header-section-number">6.3</span> From pupation to flight</h2>
@@ -4765,8 +4785,312 @@ Table 35: Shape of the observed catch curve, by the length of the interval
 <p>The width, though, is unchanged: 11.4 days from p05 to p95 against 10.9 days for the rest. A same-width curve arriving late is exactly what a slower pupal stage would produce, which is why the result of <a href="#sec-lag" class="quarto-xref">Section 6.4</a> is worth restating carefully. The problem is not that the delay is implausible; it is that the delay is not a function of temperature. It is a property of the site, and it is largest at the warmest sites, where a development model must run faster rather than slower.</p>
 <p>Millinocket in 1980 is the instructive exception: catch through the modelled window <em>and</em> a separate spike a fortnight after it. Two modes are what an influx on top of a resident population should look like, and a systematic search for them across the 170 curves has not been done.</p>
 </section>
-<section id="open-questions-for-the-comparison" class="level2" data-number="6.7">
-<h2 data-number="6.7" class="anchored" data-anchor-id="open-questions-for-the-comparison"><span class="header-section-number">6.7</span> Open questions for the comparison</h2>
+<section id="latitude-or-how-many-moths-were-caught" class="level2" data-number="6.7">
+<h2 data-number="6.7" class="anchored" data-anchor-id="latitude-or-how-many-moths-were-caught"><span class="header-section-number">6.7</span> Latitude, or how many moths were caught?</h2>
+<p>The offset’s spatial structure could be something simpler than geography: a percentile estimated from a few hundred moths is a poorer statistic than one estimated from twenty thousand, and the sites that fit worst are also sites that catch little. Latitude and catch size turn out to be nearly independent here (r = 0.14 across locality-years), so the two can be separated.</p>
+<div class="cell">
+<div id="tbl-offset-covariates" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-offset-covariates-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 36: The BioSIM offset against latitude and catch size
+</figcaption>
+<div aria-describedby="tbl-offset-covariates-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Term</th>
+<th style="text-align: right;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Latitude, d per degree north</td>
+<td style="text-align: right;">+3.30 (p = 0.000)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Catch size, d per tenfold increase</td>
+<td style="text-align: right;">+1.93 (p = 0.001)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">R&lt;U+00B2&gt;, latitude alone</td>
+<td style="text-align: right;">0.237</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">R&lt;U+00B2&gt;, catch alone</td>
+<td style="text-align: right;">0.079</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">R&lt;U+00B2&gt;, both</td>
+<td style="text-align: right;">0.284</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Variance unique to latitude</td>
+<td style="text-align: right;">0.205</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Variance unique to catch</td>
+<td style="text-align: right;">0.046</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Variance shared</td>
+<td style="text-align: right;">0.032</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Both terms are significant and mostly independent: latitude carries four times the unique variance of catch size. The next table asks the sharper question — is this about <em>which localities</em>, or about <em>which years at a locality</em>?</p>
+<div class="cell">
+<div id="tbl-offset-within-between" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-offset-within-between-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 37: Between localities and within them
+</figcaption>
+<div aria-describedby="tbl-offset-within-between-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Comparison</th>
+<th style="text-align: right;">r</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Between localities (n = 42): mean offset vs latitude</td>
+<td style="text-align: right;">0.57</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Between localities: mean offset vs mean catch</td>
+<td style="text-align: right;">0.41</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Within localities (153 rows, 31 sites): offset vs catch</td>
+<td style="text-align: right;">0.08</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Within localities, year means also removed</td>
+<td style="text-align: right;">-0.15</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>A locality’s poor years are not its low-catch years: within a site the offset does not follow the size of the catch. The effect is between localities — a property of <em>which sites</em>, not of how many moths a given season produced.</p>
+<div class="cell">
+<div id="tbl-offset-grid" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-offset-grid-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 38: Mean BioSIM offset by region and catch size
+</figcaption>
+<div aria-describedby="tbl-offset-grid-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 34%">
+<col style="width: 21%">
+<col style="width: 18%">
+<col style="width: 18%">
+<col style="width: 7%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">region</th>
+<th style="text-align: left;">band</th>
+<th style="text-align: right;">locality-years</th>
+<th style="text-align: right;">mean offset, d</th>
+<th style="text-align: right;">sd, d</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">South (below 45.5 &lt;U+00B0&gt;N)</td>
+<td style="text-align: left;">1,000 or more</td>
+<td style="text-align: right;">44</td>
+<td style="text-align: right;">-2.7</td>
+<td style="text-align: right;">5.3</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">South (below 45.5 &lt;U+00B0&gt;N)</td>
+<td style="text-align: left;">under 1,000 moths</td>
+<td style="text-align: right;">30</td>
+<td style="text-align: right;">-9.5</td>
+<td style="text-align: right;">7.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">North</td>
+<td style="text-align: left;">1,000 or more</td>
+<td style="text-align: right;">57</td>
+<td style="text-align: right;">0.0</td>
+<td style="text-align: right;">4.8</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">North</td>
+<td style="text-align: left;">under 1,000 moths</td>
+<td style="text-align: right;">39</td>
+<td style="text-align: right;">-1.8</td>
+<td style="text-align: right;">5.9</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>The two effects add. Latitude is visible at either catch level and catch size at either latitude, and the interaction is marginal (p = 0.049): the catch effect is somewhat stronger in the south. Restricted to catches of 1,000 moths or more, the latitude gradient survives at about 2.2 d per degree against 3.5 d per degree overall, while the catch effect disappears (r = 0.05).</p>
+<p>The worst-fitting sites are both southern and habitually small-catch, so their offsets cannot be assigned to either cause alone. Southern localities that caught in the thousands sit far closer to the model.</p>
+<div class="cell">
+<div id="tbl-offset-sites-catch" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-offset-sites-catch-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 39: The four worst localities, and southern localities with large catches
+</figcaption>
+<div aria-describedby="tbl-offset-sites-catch-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 23%">
+<col style="width: 31%">
+<col style="width: 6%">
+<col style="width: 6%">
+<col style="width: 13%">
+<col style="width: 18%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Group</th>
+<th style="text-align: left;">Location</th>
+<th style="text-align: right;">years</th>
+<th style="text-align: right;">lat</th>
+<th style="text-align: right;">median catch</th>
+<th style="text-align: left;">median offset, d</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Southern, large catch</td>
+<td style="text-align: left;">Passadumkeag Township, Maine</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">45.18</td>
+<td style="text-align: right;">8688.0</td>
+<td style="text-align: left;">-5.5</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Southern, large catch</td>
+<td style="text-align: left;">Meddybemps Township, Maine</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">45.03</td>
+<td style="text-align: right;">11854.5</td>
+<td style="text-align: left;">-3.7</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Southern, large catch</td>
+<td style="text-align: left;">Greenbush Township, Maine</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">45.07</td>
+<td style="text-align: right;">10284.0</td>
+<td style="text-align: left;">-0.7</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Southern, large catch</td>
+<td style="text-align: left;">Kingfield Township, Maine</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">44.98</td>
+<td style="text-align: right;">32153.0</td>
+<td style="text-align: left;">-0.2</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Worst fitting</td>
+<td style="text-align: left;">Brunswick Township, Maine</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">43.89</td>
+<td style="text-align: right;">320.0</td>
+<td style="text-align: left;">-18.7</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Worst fitting</td>
+<td style="text-align: left;">Blue Hill Township, Maine</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">44.44</td>
+<td style="text-align: right;">377.5</td>
+<td style="text-align: left;">-16.6</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Worst fitting</td>
+<td style="text-align: left;">Mount Vernon Township, Maine</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">44.46</td>
+<td style="text-align: right;">216.0</td>
+<td style="text-align: left;">-15.9</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Worst fitting</td>
+<td style="text-align: left;">Millinocket, Maine</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">45.65</td>
+<td style="text-align: right;">475.0</td>
+<td style="text-align: left;">-14.3</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+</section>
+<section id="is-the-catch-size-effect-precision-or-biology" class="level2" data-number="6.8">
+<h2 data-number="6.8" class="anchored" data-anchor-id="is-the-catch-size-effect-precision-or-biology"><span class="header-section-number">6.8</span> Is the catch-size effect precision, or biology?</h2>
+<p>Part of it is precision. The spread of the offset is about twice as wide at small catches as at large ones — sd 7.4 d below a thousand moths against 4.6 d above five thousand — which is what estimating a percentile from few moths does.</p>
+<p>Precision alone, though, produces scatter, not a shift, and a detection threshold — the mechanism that would produce one — makes a specific prediction: it should clip the sparse early nights, delaying the observed start and <em>narrowing</em> the observed curve. The data go the other way.</p>
+<div class="cell">
+<div id="tbl-offset-shape-catch" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-offset-shape-catch-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 40: Shape of the observed catch curve against catch size
+</figcaption>
+<div aria-describedby="tbl-offset-shape-catch-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Quantity</th>
+<th style="text-align: right;">r with log10 catch</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Share of catch after the modelled flight window</td>
+<td style="text-align: right;">-0.31</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Share of catch before it</td>
+<td style="text-align: right;">0.07</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Observed p05&lt;U+2013&gt;p95 width</td>
+<td style="text-align: right;">-0.23</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Small catches carry proportionally <strong>more</strong> of their catch after the modelled window, not less before it, and their curves are slightly <strong>wider</strong>. That is the opposite of clipping, and it is the same signature as the displaced southern curves of <a href="#sec-lag" class="quarto-xref">Section 6.4</a>.</p>
+<p>It also sharpens the immigration hypothesis into something testable. If the late weight came from moths arriving rather than from the local cohort, it should matter most where the local population is small — which is what the negative correlation with catch size says — and those late nights should coincide with conditions that carry moths, which the extracted wind fields can be asked directly. The alternative reading is that a small catch reflects a site marginal for the insect, where the local cohort is both sparse and genuinely late; distinguishing the two needs the nightly weather, not more summary statistics.</p>
+</section>
+<section id="open-questions-for-the-comparison" class="level2" data-number="6.9">
+<h2 data-number="6.9" class="anchored" data-anchor-id="open-questions-for-the-comparison"><span class="header-section-number">6.9</span> Open questions for the comparison</h2>
 <ul>
 <li><strong>The spatial residual is the next problem, and neither the weather nor the missing pupal stage explains it.</strong> Latitude is a proxy, not an explanation. The two models run on different weather and make the same spatial error, and <a href="#sec-lag" class="quarto-xref">Section 6.4</a> rules out a temperature-driven pupal stage as the missing piece. What is left is what both models share — development with no site-level host, shading or microclimate modifier — and what neither contains: immigration. <a href="#sec-lag" class="quarto-xref">Section 6.4</a> narrows it further: the southern catch curves are displaced late by a week or more at unchanged width, so whatever is missing acts like a site-fixed delay rather than a broadening. Nightly trapping conditions and a systematic search for second modes are the next tests.</li>
 <li><strong>Trap attraction is not modelled at all.</strong> The observed curve is a catch curve. Nightly weather gates flight and gates trapping, and neither is in the comparison yet; the hourly CaSR variables extracted for every locality-year — temperature, wind, precipitation — were extracted for exactly this purpose.</li>

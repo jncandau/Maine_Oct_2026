@@ -986,14 +986,16 @@ structure_r <- function(pred, offset) {
          cor(p, o)),
     cor(residuals(lm(pred ~ factor(Year), d)),
         residuals(lm(obs_p50 ~ factor(Year), d))),
-    cor(d$offset, d$Latitude))
+    cor(d$offset, d$Latitude),
+    cor(d$offset, log10(d$season_total)))
 }
 
 tibble::tibble(
   Comparison = c("Predicted against observed, all locality-years",
                  "Year means (years with 5 or more localities)",
                  "Within years, across localities",
-                 "Offset against latitude"),
+                 "Offset against latitude",
+                 "Offset against log10 season total"),
   BioSIM   = structure_r(sim_p50, d_p50),
   bayessbw = structure_r(bayes_pred_p50, d_p50_bayes)
 ) |>
@@ -1016,9 +1018,10 @@ same summer, neither model captures it.
 
 **The residual is not noise, and it is the same residual in both models.**
 It has a clear spatial structure — the offset correlates with latitude at 0.49
-(BioSIM) and 0.39 (bayessbw), so both run early in the south — and the two
-models' offsets correlate with each other at 0.74, locality-year by
-locality-year. That last number is the informative one. The models were fitted
+(BioSIM) and 0.39 (bayessbw), so both run early in the south, and more weakly
+with the size of the catch (0.28 and 0.17; the two are disentangled below) —
+and the two models' offsets correlate with each other at 0.74, locality-year
+by locality-year. That last number is the informative one. The models were fitted
 to different data by different methods and, crucially, were driven by
 different weather: BioSIM interpolates its own station network, bayessbw ran
 on the CaSR grid extracted in @sec-weather. A spatial error common to both is
@@ -1035,18 +1038,21 @@ cmp |>
   filter(n() >= 3) |>
   summarise(years = n(),
             `latitude` = round(first(Latitude), 2),
+            `median catch` = median(season_total),
             `BioSIM, d`   = round(median(d_p50), 1),
             `bayessbw, d` = round(median(d_p50_bayes), 1),
             .groups = "drop") |>
   filter(abs(`BioSIM, d`) > 7 | abs(`bayessbw, d`) > 7) |>
   arrange(`BioSIM, d`) |>
-  kable(align = c("l", "r", "r", "r", "r"))
+  kable(align = c("l", "r", "r", "r", "r", "r"))
 ```
 
 The worst-fitting sites are southern and coastal — the same localities that the
 weather section found to have the coolest Julys in the dataset despite their
 latitude. A model that is too early there is a model whose development is
-running too fast on those temperature series.
+running too fast on those temperature series. They are also the localities
+that catch the fewest moths, which is a second candidate explanation and is
+separated from latitude below.
 
 ## From pupation to flight
 
@@ -1268,6 +1274,184 @@ Millinocket in 1980 is the instructive exception: catch through the modelled
 window *and* a separate spike a fortnight after it. Two modes are what an
 influx on top of a resident population should look like, and a systematic
 search for them across the 170 curves has not been done.
+
+## Latitude, or how many moths were caught?
+
+The offset's spatial structure could be something simpler than geography: a
+percentile estimated from a few hundred moths is a poorer statistic than one
+estimated from twenty thousand, and the sites that fit worst are also sites
+that catch little. Latitude and catch size turn out to be nearly independent
+here (r = `r sprintf("%.2f", cor(cmp$Latitude, log10(cmp$season_total)))`
+across locality-years), so the two can be separated.
+
+```{r}
+#| label: tbl-offset-covariates
+#| tbl-cap: "The BioSIM offset against latitude and catch size"
+cmp_cov <- cmp |> mutate(logn = log10(season_total))
+
+f_lat  <- lm(d_p50 ~ Latitude, cmp_cov)
+f_catch <- lm(d_p50 ~ logn, cmp_cov)
+f_both <- lm(d_p50 ~ Latitude + logn, cmp_cov)
+r2 <- function(f) summary(f)$r.squared
+
+tibble::tibble(
+  Term = c("Latitude, d per degree north",
+           "Catch size, d per tenfold increase",
+           "R\u00b2, latitude alone", "R\u00b2, catch alone", "R\u00b2, both",
+           "Variance unique to latitude", "Variance unique to catch",
+           "Variance shared"),
+  Value = c(
+    sprintf("%+.2f (p = %.3f)", coef(f_both)[["Latitude"]],
+            summary(f_both)$coefficients["Latitude", 4]),
+    sprintf("%+.2f (p = %.3f)", coef(f_both)[["logn"]],
+            summary(f_both)$coefficients["logn", 4]),
+    sprintf("%.3f", r2(f_lat)), sprintf("%.3f", r2(f_catch)),
+    sprintf("%.3f", r2(f_both)),
+    sprintf("%.3f", r2(f_both) - r2(f_catch)),
+    sprintf("%.3f", r2(f_both) - r2(f_lat)),
+    sprintf("%.3f", r2(f_lat) + r2(f_catch) - r2(f_both))
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+Both terms are significant and mostly independent: latitude carries four times
+the unique variance of catch size. The next table asks the sharper question —
+is this about *which localities*, or about *which years at a locality*?
+
+```{r}
+#| label: tbl-offset-within-between
+#| tbl-cap: "Between localities and within them"
+between <- cmp_cov |>
+  group_by(Location) |>
+  summarise(years = n(), lat = first(Latitude), logn = mean(logn),
+            off = mean(d_p50), .groups = "drop")
+
+## Within: each locality's own mean removed, so latitude cannot contribute.
+within <- cmp_cov |> group_by(Location) |> filter(n() >= 3) |> ungroup()
+
+tibble::tibble(
+  Comparison = c(
+    sprintf("Between localities (n = %d): mean offset vs latitude", nrow(between)),
+    "Between localities: mean offset vs mean catch",
+    sprintf("Within localities (%d rows, %d sites): offset vs catch",
+            nrow(within), n_distinct(within$Location)),
+    "Within localities, year means also removed"
+  ),
+  `r` = round(c(
+    cor(between$off, between$lat),
+    cor(between$off, between$logn),
+    cor(residuals(lm(d_p50 ~ factor(Location), within)),
+        residuals(lm(logn ~ factor(Location), within))),
+    cor(residuals(lm(d_p50 ~ factor(Location) + factor(Year), within)),
+        residuals(lm(logn ~ factor(Location) + factor(Year), within)))
+  ), 2)
+) |>
+  kable(align = c("l", "r"))
+```
+
+A locality's poor years are not its low-catch years: within a site the offset
+does not follow the size of the catch. The effect is between localities —
+a property of *which sites*, not of how many moths a given season produced.
+
+```{r}
+#| label: tbl-offset-grid
+#| tbl-cap: "Mean BioSIM offset by region and catch size"
+cmp_cov |>
+  mutate(region = ifelse(Latitude < 45.5, "South (below 45.5 \u00b0N)", "North"),
+         band = ifelse(season_total < 1000, "under 1,000 moths", "1,000 or more")) |>
+  group_by(region, band) |>
+  summarise(`locality-years` = n(),
+            `mean offset, d` = round(mean(d_p50), 1),
+            `sd, d` = round(sd(d_p50), 1), .groups = "drop") |>
+  arrange(desc(region), band) |>
+  kable(align = c("l", "l", "r", "r", "r"))
+```
+
+The two effects add. Latitude is visible at either catch level and catch size
+at either latitude, and the interaction is marginal
+(p = `r sprintf("%.3f", summary(lm(d_p50 ~ Latitude * log10(season_total), cmp))$coefficients[4, 4])`):
+the catch effect is somewhat stronger in the south. Restricted to catches of
+1,000 moths or more, the latitude gradient survives at about
+`r sprintf("%.1f", coef(lm(d_p50 ~ Latitude, filter(cmp, season_total >= 1000)))[2])`
+d per degree against
+`r sprintf("%.1f", coef(lm(d_p50 ~ Latitude, cmp))[2])`
+d per degree overall, while the catch effect disappears
+(r = `r sprintf("%.2f", with(filter(cmp, season_total >= 1000), cor(d_p50, log10(season_total))))`).
+
+The worst-fitting sites are both southern and habitually small-catch, so their
+offsets cannot be assigned to either cause alone. Southern localities that
+caught in the thousands sit far closer to the model.
+
+```{r}
+#| label: tbl-offset-sites-catch
+#| tbl-cap: "The four worst localities, and southern localities with large catches"
+bind_rows(
+  cmp |>
+    group_by(Location) |>
+    filter(n() >= 3) |>
+    summarise(years = n(), lat = round(first(Latitude), 2),
+              `median catch` = median(season_total),
+              `median offset, d` = round(median(d_p50), 1), .groups = "drop") |>
+    filter(`median offset, d` < -10) |>
+    mutate(Group = "Worst fitting"),
+  cmp |>
+    filter(Latitude < 45.2, season_total > 5000) |>
+    group_by(Location) |>
+    summarise(years = n(), lat = round(first(Latitude), 2),
+              `median catch` = median(season_total),
+              `median offset, d` = round(median(d_p50), 1), .groups = "drop") |>
+    mutate(Group = "Southern, large catch")
+) |>
+  relocate(Group) |>
+  arrange(Group, `median offset, d`) |>
+  kable(align = c("l", "l", "r", "r", "r"))
+```
+
+## Is the catch-size effect precision, or biology?
+
+Part of it is precision. The spread of the offset is about twice as wide at
+small catches as at large ones — sd
+`r sprintf("%.1f", sd(filter(cmp, season_total < 1000)$d_p50))` d below a
+thousand moths against
+`r sprintf("%.1f", sd(filter(cmp, season_total >= 5000)$d_p50))` d above five
+thousand — which is what estimating a percentile from few moths does.
+
+Precision alone, though, produces scatter, not a shift, and a detection
+threshold — the mechanism that would produce one — makes a specific
+prediction: it should clip the sparse early nights, delaying the observed
+start and *narrowing* the observed curve. The data go the other way.
+
+```{r}
+#| label: tbl-offset-shape-catch
+#| tbl-cap: "Shape of the observed catch curve against catch size"
+tibble::tibble(
+  Quantity = c("Share of catch after the modelled flight window",
+               "Share of catch before it",
+               "Observed p05\u2013p95 width"),
+  `r with log10 catch` = round(c(
+    cor(lag_rows$share_late, log10(lag_rows$season_total)),
+    cor(lag_rows$share_early, log10(lag_rows$season_total)),
+    cor(lag_rows$obs_p95 - lag_rows$obs_p05, log10(lag_rows$season_total))
+  ), 2)
+) |>
+  kable(align = c("l", "r"))
+```
+
+Small catches carry proportionally **more** of their catch after the modelled
+window, not less before it, and their curves are slightly **wider**. That is
+the opposite of clipping, and it is the same signature as the displaced
+southern curves of @sec-lag.
+
+It also sharpens the immigration hypothesis into something testable. If the
+late weight came from moths arriving rather than from the local cohort, it
+should matter most where the local population is small — which is what the
+negative correlation with catch size says — and those late nights should
+coincide with conditions that carry moths, which the extracted wind fields can
+be asked directly. The alternative reading is that a small catch reflects a
+site marginal for the insect, where the local cohort is both sparse and
+genuinely late; distinguishing the two needs the nightly weather, not more
+summary statistics.
 
 ## Open questions for the comparison
 
