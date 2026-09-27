@@ -1073,16 +1073,214 @@ standard deviation of six days is the part worth pursuing: if it is structured
 by temperature rather than random, it is a pupal development function waiting
 to be fitted.
 
+## Would a degree-day pupal stage help? {#sec-lag}
+
+```{r}
+#| label: lag-data
+lag_test <- readRDS(file.path("data", "processed", "pupal_lag_test.rds"))
+lag_rows <- lag_test$rows
+lag_sum  <- lag_test$summary
+```
+
+A constant is a poor model of a poikilotherm's development, so the obvious
+improvement on the fixed 12.9 d interval is to accumulate degree-days from
+pupation and predict the catch median when a threshold is reached.
+`R/06_pupal_lag_test.R` fits that and compares it with the constant.
+
+```{r}
+#| label: tbl-lag-models
+#| tbl-cap: "Predicting the observed median catch from the predicted pupation date"
+tibble::tibble(
+  Model = c(sprintf("A  fixed lag, %.1f d", lag_sum$lag_A),
+            sprintf("B  degree-days, base %.1f \u00b0C, K = %g",
+                    lag_sum$fit_B$base, lag_sum$fit_B$K)),
+  Parameters = c(1, 2),
+  `RMSE in sample, d` = round(c(lag_sum$rmse_A, lag_sum$rmse_B), 2),
+  `RMSE leave-one-year-out, d` = round(c(lag_sum$cv_rmse_A, lag_sum$cv_rmse_B), 2)
+) |>
+  kable(align = c("l", "r", "r", "r"))
+```
+
+The degree-day model wins by 0.08 days out of sample, on 170 locality-years.
+The fitted base ran to the bottom of the grid, which is the diagnostic rather
+than a detail: at a base of 0 °C the accumulation is nearly linear in mean
+temperature, which is as close as the model can come to collapsing back into
+the constant. Over the whole dataset it stretches the interval from 11 to 16
+days, against a residual scatter of six.
+
+## Why no development function would help
+
+A development model can only use temperature, so two numbers bound what it
+could ever achieve.
+
+```{r}
+#| label: tbl-lag-ceiling
+#| tbl-cap: "The observed pupation-to-catch interval: what explains it"
+tibble::tibble(
+  Quantity = c(
+    sprintf("Interval, mean \u00b1 sd"),
+    "Mean temperature over the 14 d after pupation",
+    "Correlation of the interval with that temperature",
+    "Best fit to that temperature (5-df spline)",
+    "Interval sd after a per-locality constant",
+    "Interval sd after locality and year",
+    "Correlation of the interval with latitude",
+    "Correlation of the interval with July temperature"
+  ),
+  Value = c(
+    sprintf("%.1f \u00b1 %.1f d", mean(lag_rows$lag_obs), lag_sum$sd_lag),
+    sprintf("%.1f \u00b0C (%.1f\u2013%.1f)", mean(lag_rows$t_post),
+            min(lag_rows$t_post), max(lag_rows$t_post)),
+    sprintf("r = %+.2f", lag_sum$r_lag_tpost),
+    sprintf("R\u00b2 = %.3f, residual sd %.2f d", lag_sum$spline_r2, lag_sum$spline_sd),
+    sprintf("%.2f d", lag_sum$sd_site),
+    sprintf("%.2f d", lag_sum$sd_site_year),
+    sprintf("r = %+.2f", lag_sum$r_lag_lat),
+    sprintf("r = %+.2f", lag_sum$r_lag_tjuly)
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+The interval does not respond to the temperature the pupae experienced: the
+correlation is −0.04, where a development model needs a strong negative, and
+the best smooth function of that temperature explains 6% of the variance. It
+is instead a property of the **site**: `r sprintf("%.0f%%", lag_sum$var_share[1])`
+of its variance sits between localities against
+`r sprintf("%.0f%%", lag_sum$var_share[2])` between years, and a per-locality
+constant cuts the scatter from 6.4 to 3.8 days.
+
+Worse for the development explanation, the sign is backwards. The interval
+grows with July temperature (+0.47) and falls with latitude (−0.39): the
+warm southern sites, where development should be fastest, are the ones whose
+catch arrives longest after predicted pupation. A pupal stage would shorten
+the interval exactly where the data need it lengthened.
+
+## What the long intervals look like
+
+```{r}
+#| label: tbl-lag-late
+#| tbl-cap: "Catch falling after the modelled flight window"
+tibble::tibble(
+  Quantity = c("Share of the season's catch after BioSIM's flight p95, mean",
+               "Correlation of that share with the interval",
+               "Correlation of that share with latitude"),
+  Value = c(sprintf("%.0f%%", 100 * mean(lag_rows$share_late)),
+            sprintf("r = %+.2f", lag_sum$r_late_lag),
+            sprintf("r = %+.2f", lag_sum$r_late_lat))
+) |>
+  kable(align = c("l", "r"))
+```
+
+A quarter of the catch, on average, falls after the modelled cohort has
+finished flying, and that share is what distinguishes the long-interval sites
+(r = 0.72). It is also a southern phenomenon (r = −0.46 with latitude). The
+nightly curves show what that means.
+
+```{r}
+#| label: fig-catch-shape
+#| fig-cap: "Nightly catches at the three localities with the longest and the three with the shortest pupation-to-catch interval, each in its best-sampled year. The shaded band is BioSIM's modelled flight window (p05 to p95) and the dashed line is the pupation date predicted by bayessbw. Vertical scales are free: the panels are about shape and position, not size. Top row, north to south: intervals of 3, 2 and 15 days; bottom row 22, 25 and 28 days."
+#| fig-width: 9
+#| fig-height: 5
+library(ggplot2)
+
+## Localities with at least three comparable years, ranked by their median
+## interval; each shown in the year with the largest catch.
+site_rank <- lag_rows |>
+  group_by(Location) |>
+  filter(n() >= 3) |>
+  summarise(lag_med = median(lag_obs), .groups = "drop") |>
+  arrange(lag_med)
+
+chosen <- bind_rows(
+  head(site_rank, 3) |> mutate(group = "Shortest interval"),
+  tail(site_rank, 3) |> mutate(group = "Longest interval")
+) |>
+  left_join(lag_rows, by = "Location", relationship = "one-to-many") |>
+  group_by(Location) |>
+  slice_max(season_total, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  mutate(panel = sprintf("%s\n%d  (interval %.0f d)",
+                         sub(", Maine$", "", Location), Year, lag_obs),
+         panel = factor(panel, levels = panel[order(lag_med)]))
+
+catch <- readRDS(file.path("data", "processed", "trap_daily.rds")) |>
+  filter(status == "counted") |>
+  inner_join(select(chosen, Location, Year, panel, group,
+                    sim_p05, sim_p95, pup, obs_p50),
+             by = c("locality" = "Location", "year" = "Year"))
+
+ggplot(catch, aes(doy, moths)) +
+  geom_rect(data = distinct(catch, panel, group, sim_p05, sim_p95),
+            aes(xmin = sim_p05, xmax = sim_p95, ymin = -Inf, ymax = Inf),
+            inherit.aes = FALSE, fill = "#1f6f8b", alpha = 0.13) +
+  geom_vline(data = distinct(catch, panel, group, pup),
+             aes(xintercept = pup), colour = "#d1670f",
+             linetype = "22", linewidth = 0.5) +
+  geom_col(aes(fill = group), width = 1) +
+  scale_fill_manual(values = c("Longest interval" = "#b3541e",
+                               "Shortest interval" = "#3b6e8f")) +
+  facet_wrap(~ panel, scales = "free_y", ncol = 3) +
+  labs(title = "Where the interval is long, the whole catch sits after the modelled flight window",
+       subtitle = "Band: modelled flight, p05\u2013p95.  Dashed line: predicted pupation.",
+       x = "Day of year", y = "Moths per night") +
+  theme_minimal(base_size = 9) +
+  theme(panel.grid.minor = element_blank(),
+        strip.text = element_text(size = 8, lineheight = 1.1),
+        plot.title = element_text(size = 10, face = "plain"),
+        plot.subtitle = element_text(size = 8, colour = "grey35"),
+        legend.position = "none")
+```
+
+```{r}
+#| label: tbl-lag-shape
+#| tbl-cap: "Shape of the observed catch curve, by the length of the interval"
+lag_rows |>
+  mutate(inside = 1 - share_late - share_early,
+         group  = ifelse(lag_obs >= quantile(lag_obs, 0.75),
+                         "Longest quarter of intervals", "The other three quarters")) |>
+  group_by(group) |>
+  summarise(`locality-years` = n(),
+            `catch before the window` = sprintf("%.0f%%", 100 * mean(share_early)),
+            `inside it` = sprintf("%.0f%%", 100 * mean(inside)),
+            `after it` = sprintf("%.0f%%", 100 * mean(share_late)),
+            `observed p05–p95, d` = round(mean(obs_p95 - obs_p05), 1),
+            .groups = "drop") |>
+  arrange(desc(`locality-years`)) |>
+  kable(align = c("l", "r", "r", "r", "r"))
+```
+
+The short-interval sites catch their moths inside the modelled window and
+then stop. At the long-interval sites the catch is **displaced**: 62% of it
+falls after the window against 13% elsewhere, essentially none before it, and
+at Brunswick Township in 1981 the entire season's catch — 99% — arrives after
+the model says flight has ended.
+
+The width, though, is unchanged: 11.4 days from p05 to p95 against 10.9 days
+for the rest. A same-width curve arriving late is exactly what a slower pupal
+stage would produce, which is why the result of @sec-lag is worth restating
+carefully. The problem is not that the delay is implausible; it is that the
+delay is not a function of temperature. It is a property of the site, and it
+is largest at the warmest sites, where a development model must run faster
+rather than slower.
+
+Millinocket in 1980 is the instructive exception: catch through the modelled
+window *and* a separate spike a fortnight after it. Two modes are what an
+influx on top of a resident population should look like, and a systematic
+search for them across the 170 curves has not been done.
+
 ## Open questions for the comparison
 
-- **The spatial residual is the next problem, and the weather is no longer the
-  prime suspect.** Latitude is a proxy, not an explanation. Because the two
-  models run on different weather and make the same spatial error, the
-  remaining candidates are what they share — temperature-driven development
-  with no site-level host, shading or microclimate modifier — and what neither
-  contains: immigration. Maine catches in these years include moths that flew
-  in from elsewhere, so a locality's catch is not necessarily its own cohort,
-  and an immigration signal would plausibly be strongest in the south.
+- **The spatial residual is the next problem, and neither the weather nor the
+  missing pupal stage explains it.** Latitude is a proxy, not an explanation.
+  The two models run on different weather and make the same spatial error, and
+  @sec-lag rules out a temperature-driven pupal stage as the missing piece.
+  What is left is what both models share — development with no site-level
+  host, shading or microclimate modifier — and what neither contains:
+  immigration. @sec-lag narrows it further: the southern catch curves are
+  displaced late by a week or more at unchanged width, so whatever is missing
+  acts like a site-fixed delay rather than a broadening. Nightly trapping
+  conditions and a systematic search for second modes are the next tests.
 - **Trap attraction is not modelled at all.** The observed curve is a catch
   curve. Nightly weather gates flight and gates trapping, and neither is in the
   comparison yet; the hourly CaSR variables extracted for every locality-year —
