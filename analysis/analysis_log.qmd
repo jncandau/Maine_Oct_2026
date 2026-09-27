@@ -51,7 +51,7 @@ Code lives in `R/`, source data in `data/raw/`, processed tables in
 `data/processed/`. The project is version-controlled at
 <https://github.com/jncandau/Maine_Oct_2026>.
 
-# Trap data
+# Trap data {#sec-traps}
 
 ## Source
 
@@ -336,7 +336,7 @@ outbreak collapse.
   setting `min_season_total` to 0 in `R/01_read_trap_data.R` restores the full
   643-record Maine light-trap set.
 
-# Weather data
+# Weather data {#sec-weather}
 
 ```{r}
 #| label: weather-data
@@ -520,7 +520,7 @@ the maritime gradient, not just latitude.
   cell holding a trap is 0.7–6.3 km from it and represents ~100 km², so the
   extracted series describes the neighbourhood, not the trap clearing.
 
-# Modelled phenology from BioSIM
+# Modelled phenology from BioSIM {#sec-biosim}
 
 ```{r}
 #| label: biosim-data
@@ -708,3 +708,347 @@ dropped: what to do with these locality-years is a decision for the analysis.
   `LastSampleDate` and `ObservedAI` for that, and the `Phenology` sheet of the
   source workbook holds average-instar observations — none of them in Maine,
   but the option exists for a validation elsewhere.
+
+
+# Modelled pupation from bayessbw
+
+```{r}
+#| label: pupal-data
+pupal_phenology <- readRDS(file.path("data", "processed", "pupal_phenology.rds"))
+```
+
+A second, independent model of development was run over the same
+locality-years: the Bayesian development model of Studens et al.
+([kdis19/bayessbw](https://github.com/kdis19/bayessbw)), driven by the CaSR
+hourly temperatures of @sec-weather rather than by BioSIM's own weather.
+
+## What the model is, and what "pupal phenology" means here
+
+`bayessbw` fits Sharpe-DeMichele / Schoolfield development-rate curves to
+laboratory rearing data, in a Bayesian hierarchical form: every posterior draw
+carries a rate curve for each larval stage plus a lognormal individual-variation
+term. The fitted posterior is distributed as the R package
+[`sbwFieldPheno`](https://github.com/studensk/sbwFieldPheno), whose `dev_days()`
+accumulates development hour by hour through a temperature series and returns
+the day of year on which each simulated individual reaches a given stage.
+
+The laboratory data stop at L6, so the model describes the five larval stages
+**L2 to L6 only**. Pupation is the end of L6 — the last transition the model
+knows about — and the pupal stage itself is not modelled. *Pupal phenology*
+here therefore means the **date of pupation**, not the duration of the pupal
+stage. This is also how `bayessbw`'s own weather simulations use the package.
+
+`R/04_pupal_phenology.R` runs it with the settings below.
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| colony | `NB` | six are available (`AB`, `IPQL`, `NB`, `NWT`, `ON`, `QC`); New Brunswick is the nearest field colony to Maine |
+| window | 1 March – 31 August | the window used in `bayessbw`'s own simulations |
+| posterior draws | 100 | every draw the package holds |
+| individuals per draw | 100 | the simulated population |
+
+: Settings for the pupation simulation {#tbl-pupal-settings}
+
+Two things about that table matter more than the rest. `dev_days()` starts
+accumulating development on the **first row of weather it is given**, so 1 March
+is an assumption about the date of post-diapause L2 emergence, and every
+predicted date moves with it. And because all 100 posterior draws are used, the
+posterior spread reported below is the model's own uncertainty, not a sampling
+error.
+
+## The resulting dataset
+
+```{r}
+#| label: tbl-pupal-overview
+#| tbl-cap: "Predicted pupation across the 227 locality-years"
+tibble::tibble(
+  Quantity = c("Locality-years", "Population median (p50), mean",
+               "Population median, range",
+               "Within-population spread (p05\u2013p95), mean",
+               "Posterior interval on the median, mean width"),
+  Value = c(
+    format(nrow(pupal_phenology), big.mark = ","),
+    sprintf("DOY %.1f", mean(pupal_phenology$p50)),
+    sprintf("DOY %.0f\u2013%.0f", min(pupal_phenology$p50), max(pupal_phenology$p50)),
+    sprintf("%.1f d", mean(pupal_phenology$spread)),
+    sprintf("%.1f d", mean(pupal_phenology$post_hi - pupal_phenology$post_lo))
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+Each simulation returns a matrix of individuals by posterior draws. Sorting a
+draw's column turns it into that draw's population distribution, and taking the
+median rank by rank across draws gives the **median simulated population** —
+the summary `bayessbw` itself uses, written out in full as
+`pupal_population.rds`. Percentiles in the table above are percentiles of that
+population; the posterior interval is built the other way round, from the
+median of each draw, so the two columns separate individual variation from
+parameter uncertainty.
+
+They differ by a factor of four: the fitted curves place the population median
+to within about two days, while the population itself takes nine days to pupate
+from p05 to p95. Individual variation, not parameter uncertainty, dominates.
+
+```{r}
+#| label: tbl-pupal-vs-biosim
+#| tbl-cap: "Predicted pupation, bayessbw against BioSIM"
+biosim_pupae <- biosim_phenology |>
+  filter(series == "Pupae_mf") |>
+  select(Location, Year, biosim_p50 = p50)
+
+pupal_phenology |>
+  select(Location, Year, bayes_p50 = p50) |>
+  inner_join(biosim_pupae, by = c("Location", "Year")) |>
+  summarise(
+    `locality-years` = n(),
+    `bayessbw p50, mean` = round(mean(bayes_p50), 1),
+    `BioSIM p50, mean`   = round(mean(biosim_p50), 1),
+    `difference, median` = round(median(bayes_p50 - biosim_p50), 1),
+    `difference, range`  = sprintf("%+.1f to %+.1f", min(bayes_p50 - biosim_p50),
+                                   max(bayes_p50 - biosim_p50)),
+    `correlation`        = round(cor(bayes_p50, biosim_p50), 2)
+  ) |>
+  kable(align = c("r", "r", "r", "r", "r", "r"))
+```
+
+The two models were built from different data, fitted by different methods and
+driven by different weather, and they place pupation within a day of each
+other on average. Their disagreement at individual locality-years reaches two
+weeks in both directions, which is the more useful number: it is the scale at
+which either model's site-level prediction should be trusted.
+
+## Open questions for the pupation model
+
+- **The 1 March start is an assumption, not a measurement.** Anchoring the
+  simulation on BioSIM's own L2 emergence date instead would make the two
+  models comparable on equal terms and remove one arbitrary choice.
+- **One colony of six.** `NB` is used throughout. The other five are one
+  configuration change away, and comparing them would show how much the source
+  population matters against site and year.
+- **The pupal stage is not modelled.** Getting from pupation to flight needs
+  either BioSIM or a separate pupal development function; the section below
+  measures that interval empirically instead.
+
+
+# Model versus observed {#sec-compare}
+
+```{r}
+#| label: compare-data
+model_vs_observed <- readRDS(file.path("data", "processed", "model_vs_observed.rds"))
+cmp <- filter(model_vs_observed, comparable)
+```
+
+`R/05_compare_model_observed.R` brings the three sides together, one row per
+locality-year: the percentiles of the nightly catch curve, the percentiles of
+BioSIM's daily flight curve, and the predicted date of pupation from both
+models. All of them are percentiles of a curve over the season computed by the
+same helper (`R/functions/phenology.R`), so `p50` always means *half of the
+season's total has happened by this day*.
+
+## What can be compared
+
+A caught moth is not the same thing as a flying moth: the trap samples adults
+that are active, close enough and attracted to light, whereas BioSIM reports the
+percentage of the cohort in the flight state. The comparison below is about
+**timing**, never about numbers.
+
+Two flags decide which rows carry a meaningful comparison, and both are kept in
+the output rather than filtered away.
+
+```{r}
+#| label: tbl-comparable
+#| tbl-cap: "Locality-years available for comparison"
+model_vs_observed |>
+  mutate(group = case_when(
+    comparable ~ "Comparable: usable season and complete cohort",
+    usable_phenology & !flight_complete ~ "Usable season, incomplete modelled cohort",
+    !usable_phenology & flight_complete ~ "Truncated trapping season, complete cohort",
+    TRUE ~ "Neither"
+  )) |>
+  group_by(group) |>
+  summarise(`locality-years` = n(),
+            `median offset, d` = round(median(d_p50), 1),
+            .groups = "drop") |>
+  arrange(desc(`locality-years`)) |>
+  kable(align = c("l", "r", "r"))
+```
+
+Only the first group is used for the statistics that follow. The truncated
+seasons are shown in the table because their offset is the diagnostic one would
+expect: a season that starts too late or ends too early pushes the observed
+median towards the middle of the sampled window, and those rows sit further
+from the model than the comparable ones.
+
+## Flight
+
+```{r}
+#| label: tbl-offsets
+#| tbl-cap: "BioSIM flight minus observed catch, over the comparable locality-years"
+tibble::tibble(
+  Statistic = c("p05 (start)", "p25", "p50 (median)", "p75", "p95 (end)",
+                "peak day", "duration p05\u2013p95"),
+  `Median offset, d` = c(median(cmp$d_p05),
+                         median(cmp$sim_p25 - cmp$obs_p25),
+                         median(cmp$d_p50),
+                         median(cmp$sim_p75 - cmp$obs_p75),
+                         median(cmp$d_p95),
+                         median(cmp$d_peak),
+                         median(cmp$d_duration))
+) |>
+  mutate(`Median offset, d` = sprintf("%+.1f", `Median offset, d`)) |>
+  kable(align = c("l", "r"))
+```
+
+The model is **early, but only just**: half a day to four days, depending on
+which part of the curve is compared. That is a much smaller bias than the one
+to two weeks suggested by the three locality-years used to test the simulation
+script, and it settles the open question left at the end of @sec-biosim.
+
+The offset is largest at the start of the season and smallest at the end, which
+is another way of saying that the modelled flight period is longer than the
+observed one — 14.7 days against 11.0 between p05 and p95. Part of that is
+real and part is an artefact of trapping: a trap that catches nothing on a night
+when a few moths fly contributes nothing to the tails of the observed curve.
+
+The average is not the whole story, though.
+
+```{r}
+#| label: fig-compare
+#| fig-cap: "Modelled and observed median flight date. Left: one point per comparable locality-year, against the 1:1 line. Right: the same offsets against latitude, with an ordinary least-squares fit. Points are shaded by year."
+#| fig-width: 9
+#| fig-height: 4.2
+library(ggplot2)
+library(patchwork)
+
+base <- theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(),
+        plot.title = element_text(size = 10, face = "plain", hjust = 0),
+        legend.position = "none")
+
+lims <- range(c(cmp$obs_p50, cmp$sim_p50))
+
+p_scatter <- ggplot(cmp, aes(obs_p50, sim_p50, colour = Year)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "22", colour = "grey45") +
+  geom_point(size = 1.9, alpha = 0.85) +
+  annotate("text", x = lims[2], y = lims[2], hjust = 1, vjust = 1.8,
+           size = 3, colour = "grey45", label = "1:1") +
+  scale_colour_viridis_c(option = "mako", end = 0.85, direction = -1) +
+  coord_equal(xlim = lims, ylim = lims) +
+  labs(title = "Site by site the agreement is loose",
+       x = "Observed median catch date (DOY)",
+       y = "Modelled median flight date (DOY)")
+
+p_lat <- ggplot(cmp, aes(Latitude, d_p50, colour = Year)) +
+  geom_hline(yintercept = 0, colour = "grey45", linetype = "22") +
+  geom_point(size = 1.9, alpha = 0.85) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE,
+              colour = "grey20", fill = "grey80", linewidth = 0.6) +
+  scale_colour_viridis_c(option = "mako", end = 0.85, direction = -1,
+                         guide = guide_colourbar(barheight = 8)) +
+  labs(title = "and the model runs early in the south",
+       x = "Latitude (\u00b0N)",
+       y = "Model minus observed (d)") +
+  theme(legend.position = "right")
+
+(p_scatter & base) + (p_lat & base + theme(legend.position = "right"))
+```
+
+```{r}
+#| label: tbl-compare-structure
+#| tbl-cap: "Where the agreement is, and where it is not"
+tibble::tibble(
+  Comparison = c("All comparable locality-years",
+                 "Year means (years with 5 or more localities)",
+                 "Within years, across localities",
+                 "Offset against latitude"),
+  `r` = c(
+    cor(cmp$sim_p50, cmp$obs_p50),
+    with(cmp |> group_by(Year) |> filter(n() >= 5) |>
+           summarise(s = mean(sim_p50), o = mean(obs_p50), .groups = "drop"),
+         cor(s, o)),
+    cor(residuals(lm(sim_p50 ~ factor(Year), cmp)),
+        residuals(lm(obs_p50 ~ factor(Year), cmp))),
+    cor(cmp$d_p50, cmp$Latitude)
+  )
+) |>
+  mutate(r = round(r, 2)) |>
+  kable(align = c("l", "r"))
+```
+
+This is the substantive result of the comparison, and it has two halves.
+
+**The model gets the year right.** Averaged over the localities sampled in a
+year, modelled and observed median dates correlate at 0.83: warm early seasons
+and cold late ones are reproduced, and the six-week span of median flight dates
+across the record is not an artefact of which sites happened to be trapped.
+
+**It does not get the site right.** Once the year is removed, the correlation
+across localities within a year collapses to 0.14. Whatever makes one Maine
+locality fly earlier than another in the same summer, the model is not
+capturing it — and the residual is not noise, because it has a clear spatial
+structure: the offset correlates with latitude at 0.49, so the model runs
+early in the south and closer to observed in the north.
+
+```{r}
+#| label: tbl-compare-sites
+#| tbl-cap: "Localities with at least three comparable years and a median offset beyond a week"
+cmp |>
+  group_by(Location) |>
+  filter(n() >= 3) |>
+  summarise(years = n(),
+            `latitude` = round(first(Latitude), 2),
+            `median offset, d` = round(median(d_p50), 1),
+            .groups = "drop") |>
+  filter(abs(`median offset, d`) > 7) |>
+  arrange(`median offset, d`) |>
+  kable(align = c("l", "r", "r", "r"))
+```
+
+The worst-fitting sites are southern and coastal — the same localities that the
+weather section found to have the coolest Julys in the dataset despite their
+latitude. A model that is too early there is a model whose development is
+running too fast on those temperature series.
+
+## From pupation to flight
+
+The pupal stage is missing from `bayessbw` and the trap sees only adults, so the
+interval between them can be measured rather than modelled.
+
+```{r}
+#| label: tbl-lag
+#| tbl-cap: "Days from predicted pupation to the observed median catch"
+tibble::tibble(
+  Source = c("bayessbw pupation", "BioSIM pupation"),
+  `Median, d` = c(median(cmp$lag_bayes), median(cmp$lag_biosim)),
+  `Mean, d`   = c(mean(cmp$lag_bayes), mean(cmp$lag_biosim)),
+  `SD, d`     = c(sd(cmp$lag_bayes), sd(cmp$lag_biosim))
+) |>
+  mutate(across(where(is.numeric), ~ round(.x, 1))) |>
+  kable(align = c("l", "r", "r", "r"))
+```
+
+Both models put the median catch about a fortnight after pupation, which is
+a plausible pupal period plus a few days of adult maturation, and the agreement
+between two independent development models on that interval is reassuring. The
+standard deviation of six days is the part worth pursuing: if it is structured
+by temperature rather than random, it is a pupal development function waiting
+to be fitted.
+
+## Open questions for the comparison
+
+- **The spatial residual is the next problem.** Latitude is a proxy, not an
+  explanation. The candidates are the weather driving the models (BioSIM's
+  station interpolation against the CaSR grid, which the weather section
+  already showed disagree on which sites are coolest), the absence of any
+  site-level host or shading effect in the models, and immigration — Maine
+  catches in these years include moths that flew in from elsewhere, and a
+  locality's catch is not necessarily its own cohort.
+- **Trap attraction is not modelled at all.** The observed curve is a catch
+  curve. Nightly weather gates flight and gates trapping, and neither is in the
+  comparison yet; the hourly CaSR variables extracted for every locality-year —
+  temperature, wind, precipitation — were extracted for exactly this purpose.
+- **The comparable set could be larger.** Relaxing the tail threshold from 5%
+  to 10% would return 12 further records and the years 1987 and 1988; whether
+  the added truncation is acceptable is a judgement the sensitivity table in
+  @sec-traps supports.

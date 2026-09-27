@@ -307,24 +307,8 @@ if (with(sex_sum_check, pupae_gap > 1 || adult_gap > 1)) {
 ##     the adult curve lags flight. They are reported for comparison, not as
 ##     an emergence date.
 
-#' Percentiles of a cumulative curve, by linear interpolation
-#'
-#' @param doy   day of year, increasing.
-#' @param value non-negative daily quantity.
-#' @param probs proportions of the season total.
-#' @return named numeric vector of days of year.
-curve_percentiles <- function(doy, value, probs) {
-  out <- setNames(rep(NA_real_, length(probs)), sprintf("p%02d", round(probs * 100)))
-  keep <- !is.na(value) & value >= 0
-  if (!any(keep) || sum(value[keep]) == 0) return(out)
-  d <- doy[keep]; v <- value[keep]
-  o <- order(d); d <- d[o]; v <- v[o]
-  cum <- cumsum(v) / sum(v)
-  x <- c(min(d) - 1, d)          # anchor the curve at zero before the first day
-  y <- c(0, cum)
-  ok <- c(TRUE, diff(y) > 0)     # approx() needs a strictly increasing curve
-  setNames(stats::approx(y[ok], x[ok], xout = probs, ties = "ordered")$y, names(out))
-}
+## curve_percentiles() is shared with the trap and comparison scripts.
+source(file.path("R", "functions", "phenology.R"))
 
 ## Names of the percentile columns, e.g. p05 ... p95.
 p_names <- sprintf("p%02d", round(probs * 100))
