@@ -44,10 +44,12 @@
 #         data/processed/biosim_daily.rds   runs averaged, daily percentages
 #         data/processed/biosim_phenology.rds  three rows per locality-year
 #                                           (Pupae_mf, Adult_mf, Flight_mf)
-#                                           with percentiles, peak and duration
+#                                           with percentiles, peak, duration
+#                                           and the `flight_complete` flag
 #         data/processed/biosim_flight.rds  the Flight_mf rows only, one per
 #                                           locality-year, for joining to the
-#                                           trap percentiles
+#                                           trap percentiles, with the
+#                                           `flight_complete` flag
 #
 # REQUIREMENTS
 #   * Java 8 or later on the machine, and the J4R + BioSIM packages:
@@ -91,6 +93,21 @@ keep_doy <- 146:243
 
 ## Percentiles of the modelled flight curve, matching the trap-side summary.
 probs <- c(0.05, 0.25, 0.50, 0.75, 0.95)
+
+## Minimum share of the cohort that must reach flight for a locality-year's
+## percentiles to describe the whole population rather than the subset that
+## completed development. Below it, `flight_complete` is FALSE -- nothing is
+## dropped, the analysis decides. With mortality off a complete locality-year
+## reaches 95-99%; the shortfall is the part of the cohort that never finishes
+## development (those locality-years end the year with every stage at zero and
+## DeathAdult equal to their flight total).
+##
+## Which way this biases the percentiles is not clear a priori and is not
+## resolved by the data: in the 1968-1989 run the 20 flagged locality-years
+## have a LATER mean p50 (194.0) than the 207 complete ones (190.1), which is
+## consistent with incompleteness arising in cold site-years where development
+## runs late, rather than with the surviving fraction being the fast developers.
+min_flight_pct <- 90
 
 ## Set to FALSE to force new calls to BioSIM even if the raw output exists.
 reuse_raw <- TRUE
@@ -331,6 +348,21 @@ biosim_phenology <- biosim_daily %>%
   arrange(Location, Year, match(series, pheno_series))
 
 ## Wide view of the flight series alone, for joining to the trap percentiles.
+## `flight_complete` marks the locality-years whose curve covers essentially
+## the whole cohort; where it is FALSE the percentiles describe only the
+## fraction that completed development (see `min_flight_pct` above for what
+## that does, and does not, imply about their timing).
+## Completeness is a property of the locality-year, not of one series, so the
+## flag is attached to all three rows -- a pupal or adult curve from a cohort
+## that never finished flying is just as partial.
+flight_completeness <- biosim_phenology %>%
+  filter(series == "Flight_mf") %>%
+  transmute(Location, Year, flight_complete = season_pct >= min_flight_pct)
+
+biosim_phenology <- biosim_phenology %>%
+  left_join(flight_completeness, by = c("Location", "Year")) %>%
+  relocate(flight_complete, .after = series)
+
 biosim_flight <- biosim_phenology %>%
   filter(series == "Flight_mf") %>%
   select(-series)
@@ -349,6 +381,7 @@ message(sprintf(
          "  mortality off (ApplyMortality = %d, ApplyAdultMortality = %d)\n",
          "  modelled flight (Male+Female): p50 DOY %.0f to %.0f, mean %.1f; ",
          "season total %.0f%% to %.0f%% of the cohort\n",
+         "  flight_complete (>= %d%% of the cohort): %d of %d locality-years\n",
          "  written to %s, %s and %s"),
   n_distinct(paste(flight$Location, flight$Year)), n_distinct(flight$Location),
   min(flight$Year), max(flight$Year), max(flight$n_runs),
@@ -356,5 +389,6 @@ message(sprintf(
   min(flight$p50, na.rm = TRUE), max(flight$p50, na.rm = TRUE),
   mean(flight$p50, na.rm = TRUE),
   min(flight$season_pct, na.rm = TRUE), max(flight$season_pct, na.rm = TRUE),
+  min_flight_pct, sum(biosim_flight$flight_complete), nrow(biosim_flight),
   daily_file, pheno_file, flight_file
 ))
