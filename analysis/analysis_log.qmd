@@ -2075,6 +2075,196 @@ spline in days from the modelled median, and its behaviour beyond about
 \u00b115 days rests on few nights — the upturn at the far right of the fitted
 correction is an edge artefact, not a second flight period.
 
+# What distribution describes a night's catch? {#sec-dist}
+
+```{r}
+#| label: dist-data
+count_dist <- readRDS(file.path("data", "processed", "count_distribution.rds"))
+dist_cmp   <- count_dist$comparison
+dist_mv    <- count_dist$mv
+dist_bands <- count_dist$band_table
+dist_sum   <- count_dist$summary
+
+dist_get <- function(fam, col) dist_cmp[[col]][dist_cmp$family == fam]
+## Variance inflation each quadratic family implies at a given mean:
+## nbinom2 has var = mu + mu^2/theta, the lognormal mixture
+## var = mu + mu^2 (exp(sigma^2) - 1).
+nb2_factor <- 1 / dist_get("nbinom2", "dispersion")
+pln_factor <- exp(dist_sum$nightly_sd^2) - 1
+```
+
+The marginal distribution of nightly counts is not a useful target: these
+nights differ enormously in what they should hold, from a locality-year
+totalling a hundred moths to one totalling seventy thousand, and within a
+season from the first night of flight to the peak. The question worth asking
+is conditional — **given what a night is expected to hold, how is the count
+scattered around it?**
+
+`R/11_count_distribution.R` gives every candidate the same mean structure, the
+`reg+` predictor of @sec-count with a locality-year level, and varies only the
+distribution of the count around that mean.
+
+```{r}
+#| label: tbl-dist
+#| tbl-cap: "Conditional distributions for a night's catch, same mean structure throughout. Zero-catch nights and the largest count are posterior predictive checks: the median over 100 simulations from each fitted model"
+## Column names are set afterwards: R does not accept \u escapes inside
+## backtick-quoted names.
+dist_cmp |>
+  transmute(family, parameters, AIC = round(AIC), dAIC = round(dAIC),
+            zeros = round(zeros_simulated),
+            largest = format(round(max_simulated), big.mark = ",")) |>
+  setNames(c("Family", "par", "AIC", "\u0394AIC", "zero nights",
+             "largest count")) |>
+  kable(align = c("l", "r", "r", "r", "r", "r"))
+```
+
+Observed: **`r format(dist_sum$zeros_observed, big.mark = ",")` zero-catch
+nights** of `r format(dist_sum$n_nights, big.mark = ",")`, and a largest count
+of `r format(dist_sum$max_observed, big.mark = ",")` moths.
+
+**The Poisson is hopeless**, by
+`r format(round(dist_get("poisson", "dAIC")), big.mark = ",")` AIC. It expects
+`r round(dist_get("poisson", "zeros_simulated"))` empty nights where
+`r format(dist_sum$zeros_observed, big.mark = ",")` occurred. The raw
+variance-to-mean ratio of the catches is
+`r format(round(dist_sum$var_ratio), big.mark = ",")`.
+
+**Zero inflation is unnecessary.** Adding a zero-inflation component to the
+negative binomial costs two AIC and moves nothing — the fitted component is
+essentially empty, and the simulated number of empty nights is unchanged. The
+empty nights are the lower tail of a very overdispersed count distribution,
+not a separate process that switches the trap off. That is worth stating
+plainly, because a zero-inflated model is the reflex for trap data with a
+quarter of its nights empty.
+
+**The variance is quadratic in the mean, and the negative binomial has it
+right.** Binning nights by their expected catch gives an empirical
+variance-mean slope of `r sprintf("%.2f", dist_sum$mv_slope)` on the log
+scale, where 1 is the Poisson and `nbinom1` and 2 is the negative binomial
+(NB2). `nbinom1`, which forces slope 1, is beaten by
+`r format(round(dist_get("nbinom1", "dAIC")), big.mark = ",")` AIC, and NB2's
+fitted variance function tracks the binned data across three orders of
+magnitude (@fig-dist).
+
+```{r}
+#| label: fig-dist
+#| fig-cap: "Left: variance against expected catch for nights binned into twenty groups, with the variance function each family assumes. Points are binned on the negative binomial's fitted mean, which conditions on the locality-year level only; binning on the Poisson-lognormal's fitted values would condition on its nightly random effect and collapse the points onto the Poisson line. Right: the share of nights in each count band, observed and simulated from each fitted model."
+#| fig-width: 9
+#| fig-height: 4.2
+library(ggplot2)
+library(patchwork)
+
+fam_cols <- c(Poisson = "grey60", nbinom1 = "#8c6d31",
+              nbinom2 = "#1f6f8b", `Poisson-lognormal` = "#d1670f")
+
+mu_grid <- exp(seq(log(min(dist_mv$mean_mu)), log(max(dist_mv$mean_mu)),
+                   length.out = 100))
+curves <- bind_rows(
+  tibble::tibble(family = "Poisson", mu = mu_grid, v = mu_grid),
+  tibble::tibble(family = "nbinom1", mu = mu_grid,
+                 v = mu_grid * (1 + dist_get("nbinom1", "dispersion"))),
+  tibble::tibble(family = "nbinom2", mu = mu_grid,
+                 v = mu_grid + mu_grid^2 * nb2_factor),
+  tibble::tibble(family = "Poisson-lognormal", mu = mu_grid,
+                 v = mu_grid + mu_grid^2 * pln_factor)
+) |>
+  mutate(family = factor(family, levels = names(fam_cols)))
+
+p_mv <- ggplot(dist_mv, aes(mean_mu, var_y)) +
+  geom_line(data = curves, aes(mu, v, colour = family), linewidth = 0.7) +
+  geom_point(size = 1.9, colour = "grey20") +
+  scale_x_log10(labels = scales::label_number(big.mark = ",")) +
+  scale_y_log10(labels = scales::label_log()) +
+  scale_colour_manual(values = fam_cols) +
+  labs(title = "The variance follows the negative binomial",
+       x = "Expected catch of the night (moths)", y = "Variance of the count",
+       colour = NULL)
+
+p_band <- dist_bands |>
+  filter(source %in% c("observed", "nbinom2", "poisson-ln")) |>
+  mutate(source = recode(source, observed = "Observed", nbinom2 = "nbinom2",
+                         `poisson-ln` = "Poisson-lognormal"),
+         source = factor(source, levels = c("Observed", "nbinom2",
+                                            "Poisson-lognormal"))) |>
+  ggplot(aes(band, share, fill = source)) +
+  geom_col(position = position_dodge(width = 0.75), width = 0.7) +
+  scale_y_continuous(labels = scales::label_percent()) +
+  scale_fill_manual(values = c(Observed = "grey30", nbinom2 = "#1f6f8b",
+                               `Poisson-lognormal` = "#d1670f")) +
+  labs(title = "and both families place the nights correctly",
+       x = "Moths caught", y = "Share of nights", fill = NULL)
+
+base <- theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(),
+        plot.title = element_text(size = 10, face = "plain", hjust = 0),
+        legend.key.size = unit(0.8, "lines"))
+
+(p_mv & base + theme(legend.position = "inside",
+                     legend.position.inside = c(0.02, 0.98),
+                     legend.justification = c(0, 1),
+                     legend.background = element_blank())) |
+  (p_band & base + theme(legend.position = "bottom",
+                         axis.text.x = element_text(angle = 30, hjust = 1)))
+```
+
+**The Poisson-lognormal wins the likelihood but not the second moment.** A
+Poisson count whose mean carries a lognormal nightly multiplier fits better by
+`r round(dist_get("nbinom2", "dAIC"))` AIC and reproduces the number of empty
+nights most closely
+(`r round(dist_get("poisson-ln", "zeros_simulated"))` against
+`r format(dist_sum$zeros_observed, big.mark = ",")`, where NB2 gives
+`r round(dist_get("nbinom2", "zeros_simulated"))`). Its fitted multiplier has
+a lognormal standard deviation of
+`r sprintf("%.2f", dist_sum$nightly_sd)` on the log scale, which implies a
+variance inflation of `r sprintf("%.0f", pln_factor)` times the squared mean
+against the `r sprintf("%.1f", nb2_factor)` the data show — about
+`r sprintf("%.0f", pln_factor / nb2_factor)` times too much. Its simulated
+largest count is
+`r format(round(dist_get("poisson-ln", "max_simulated")), big.mark = ",")`
+moths against `r format(dist_sum$max_observed, big.mark = ",")` observed,
+where NB2 simulates
+`r format(round(dist_get("nbinom2", "max_simulated")), big.mark = ",")`.
+
+Both statements can hold at once because a lognormal mixture this wide is
+extremely right-skewed: most nights sit near its median, which is what the
+likelihood rewards, while its mean and variance are carried by rare enormous
+nights that the data do not contain.
+
+## The answer, and what it is for
+
+- For **describing or predicting nightly catches** — regression, prediction
+  intervals, simulation — the **negative binomial (NB2)** is the distribution
+  best adapted to these data: variance
+  `r sprintf("%.1f", nb2_factor)` times the squared mean on top of the
+  Poisson term, matching the empirical variance-mean relation across three
+  orders of magnitude, with the better-behaved upper tail.
+- The **Poisson-lognormal** is the better *description of the bulk* and the
+  more interpretable mechanism — nightly catchability as a multiplicative
+  random factor — but its second moment and tail are wrong, so it should not
+  be used to simulate extremes.
+- **Do not zero-inflate.** The empty nights need no separate mechanism.
+- Neither family should be trusted for extreme quantiles: both overstate the
+  largest catches.
+
+Whichever is used, the size of the nightly term is the finding worth carrying
+forward. A standard deviation of the nightly multiplier of
+`r sprintf("%.1f", 1 / sqrt(dist_get("nbinom2", "dispersion")))` times the
+mean under NB2 — an order of magnitude in each direction under the lognormal —
+dwarfs everything the development models disagree about: a ten-day error in
+the modelled median changes a given night's expected catch by less than the
+night-to-night noise. It also explains the shape of these curves directly. A
+third of a season's catch arriving on its single best night (@sec-lag) is not
+a curious feature of spruce budworm flight; it is what a nightly multiplier of
+this size produces on a seasonal curve of ordinary width.
+
+One caveat on the fitting. `glmmTMB` warns that it was built against a
+different version of `TMB` than the one installed here. The two leading fits
+were therefore repeated with `lme4` — the Poisson-lognormal as an
+observation-level random effect, the negative binomial through `glmer.nb` —
+which reproduced the log-likelihoods to within 3 AIC and the nightly standard
+deviation to three decimals, so the ranking does not rest on that warning.
+
+
 # Findings so far {#sec-summary}
 
 ```{r}
@@ -2200,6 +2390,13 @@ nightly likelihood and on bias. Second, the calibrated prediction is
 `r sprintf("%.1f", cnt_sum$cal_width)` days against
 `r sprintf("%.1f", cnt_sum$obs_width)` observed, so an interval read straight
 off the fitted curve is conservative.
+
+The distribution around that prediction is also settled (@sec-dist): a night's
+catch is **negative binomial** with a variance about
+`r sprintf("%.1f", 1 / dist_cmp$dispersion[dist_cmp$family == "nbinom2"])`
+times the squared mean, it needs no zero inflation, and the implied
+night-to-night multiplier varies by an order of magnitude in each direction —
+more than anything the development models disagree about.
 
 bayessbw's pupation distribution does not improve on this
 (`r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "pup+"])` d
