@@ -1830,4 +1830,188 @@ Taken with @sec-sync this is the practical conclusion of the comparison. For
 predicting when spruce budworm flies in Maine, the useful signal in these
 models is the year, not the site; and a phenology model applied at a single
 trap's coordinates will be wrong by about six days, mostly because it imposes
-a latitudinal gradient the moths do not follow.
+a latitudinal gradient the moths do not follow. @sec-count turns that finding
+into a predictive model and measures what it can do.
+
+# Predicting the nightly catch curve {#sec-count}
+
+```{r}
+#| label: count-data
+count_model <- readRDS(file.path("data", "processed", "nightly_count_model.rds"))
+cnt_scores  <- count_model$scores
+cnt_cv      <- count_model$cv
+cnt_nights  <- count_model$nights
+cnt_sum     <- count_model$summary
+
+## Headline numbers for the prose. Inline `r` cannot carry escaped backticks,
+## so anything needing a backticked column name is computed here.
+cnt_best <- cnt_cv |>
+  filter(model == "reg+") |>
+  summarise(mae    = mean(abs(err_p50)),
+            rmse   = sqrt(mean(err_p50^2)),
+            bias   = mean(err_p50),
+            within = mean(abs(err_p50) <= 5))
+```
+
+Everything so far has compared summary dates. This section asks the
+predictive question directly: given a development model, how well can the
+**shape of a season** be predicted at a locality — the share of its catch
+falling on each night?
+
+Abundance is deliberately not predicted. Nothing in this project forecasts
+population density, so every model below carries one free level per
+locality-year that absorbs the season total and leaves only timing to
+explain. A Poisson likelihood with such a level per group is a multinomial
+over that group's nights, so the fitted values read directly as predicted
+shares, and a held-out locality-year needs no level of its own.
+
+`R/10_nightly_count_model.R` fits `r nrow(cnt_scores)` such models to
+`r format(cnt_sum$n_nights, big.mark = ",")` trapped nights from
+`r cnt_sum$n_ly` locality-years
+(`r sprintf("%.0f%%", 100 * cnt_sum$zero_share)` of nights caught nothing) and
+scores them leave-one-year-out.
+
+| Model | What drives the shape |
+|-------|-----------------------|
+| `clim` | a seasonal curve only, `ns(day of year)` fitted from the other years — the climatological baseline any predictor must beat |
+| `raw` | BioSIM's site curve used as is, no fitted parameters |
+| `site` | the same curve with a free exponent |
+| `site+` | plus a spline correction in days from the modelled median |
+| `reg+` | the same, driven by one regional BioSIM curve per year |
+| `reg+lat` | plus a latitude interaction |
+
+: The six specifications {#tbl-count-models}
+
+```{r}
+#| label: tbl-count-scores
+#| tbl-cap: "Leave-one-year-out skill. Log-likelihood is the multinomial log-likelihood of the observed counts given the predicted shares, reported per moth so that it reads as a mean log predicted share"
+cnt_cv |>
+  group_by(model) |>
+  summarise(`log-lik per moth` = sum(loglik * nights_n) / sum(total),
+            `mean |p50 error|, d` = mean(abs(err_p50)),
+            `RMSE p50, d` = sqrt(mean(err_p50^2)),
+            `bias, d` = mean(err_p50),
+            `within 5 d` = sprintf("%.0f%%", 100 * mean(abs(err_p50) <= 5)),
+            .groups = "drop") |>
+  mutate(model = factor(model, levels = levels(cnt_scores$model))) |>
+  arrange(model) |>
+  mutate(across(where(is.numeric), ~ round(.x, 2))) |>
+  kable(align = c("l", "r", "r", "r", "r", "r"))
+```
+
+Three things come out of that table.
+
+**A calibrated regional curve is the best predictor**, and it is a usable one:
+`r sprintf("%.1f", cnt_best$mae)` days of mean absolute error on the median
+catch date, a bias of `r sprintf("%+.1f", cnt_best$bias)` days, and
+`r sprintf("%.0f%%", 100 * cnt_best$within)` of locality-years inside five
+days — all out of sample, and with no information from the year being
+predicted.
+
+**BioSIM's raw site curve is worse than climatology.** Used as delivered it
+loses to a seasonal average fitted from other years, on both the likelihood
+and the median. Giving it a free exponent helps, a shape correction does not,
+and replacing the site curve with the single regional one helps most. Latitude
+makes things worse again, for the fourth time in this log.
+
+**The fitted exponent on the regional curve is
+`r sprintf("%.2f", cnt_sum$exponent)`.** That is the quiet headline: the
+model's curve is damped almost to flatness, and the shape of the prediction
+comes mostly from the fitted correction around the modelled median. What the
+development model contributes is *when* the season is centred — which year
+runs early, which runs late — rather than the form of the curve.
+
+```{r}
+#| label: fig-count-skill
+#| fig-cap: "Out-of-sample prediction of the median catch date. Left: the calibrated regional model against the observed median, one point per locality-year, with the 1:1 line. Right: the distribution of signed errors for each specification; the box spans the quartiles, the line is the median, whiskers reach 1.5 times the interquartile range."
+#| fig-width: 9
+#| fig-height: 4.2
+library(ggplot2)
+library(patchwork)
+
+best <- filter(cnt_cv, model == "reg+")
+lims <- range(c(best$obs_p50, best$pred_p50))
+
+p_pred <- ggplot(best, aes(obs_p50, pred_p50)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "22", colour = "grey45") +
+  geom_point(size = 1.8, alpha = 0.7, colour = "#1f6f8b") +
+  annotate("text", x = lims[2], y = lims[2], hjust = 1, vjust = 1.8,
+           size = 3, colour = "grey45", label = "1:1") +
+  coord_equal(xlim = lims, ylim = lims) +
+  labs(title = "Held-out years are predicted to about three days",
+       x = "Observed median catch date (DOY)",
+       y = "Predicted median (DOY)")
+
+ord <- cnt_scores$model
+p_err <- cnt_cv |>
+  mutate(model = factor(model, levels = ord)) |>
+  ggplot(aes(model, err_p50)) +
+  geom_hline(yintercept = 0, colour = "grey45", linetype = "22") +
+  geom_boxplot(aes(fill = model == "reg+"), width = 0.6, outlier.size = 0.7,
+               linewidth = 0.4) +
+  scale_fill_manual(values = c(`TRUE` = "#1f6f8b", `FALSE` = "grey85")) +
+  labs(title = "and the regional curve beats the rest",
+       x = NULL, y = "Predicted minus observed (d)") +
+  theme(legend.position = "none")
+
+base <- theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(),
+        plot.title = element_text(size = 10, face = "plain", hjust = 0),
+        legend.position = "none")
+
+(p_pred & base) | (p_err & base + theme(axis.text.x = element_text(angle = 30, hjust = 1)))
+```
+
+```{r}
+#| label: tbl-count-residual
+#| tbl-cap: "Where the calibrated regional model still misses"
+best_lat <- best |>
+  left_join(distinct(cnt_nights, site_year, Latitude), by = "site_year")
+
+tibble::tibble(
+  Quantity = c("Mean |error|, southern localities (below 45.5 \u00b0N)",
+               "Mean |error|, northern localities",
+               "Error against latitude",
+               "Error against log10 season total",
+               "Worst locality-year"),
+  Value = c(
+    sprintf("%.2f d", mean(abs(best_lat$err_p50[best_lat$Latitude <  45.5]))),
+    sprintf("%.2f d", mean(abs(best_lat$err_p50[best_lat$Latitude >= 45.5]))),
+    sprintf("r = %+.2f", cor(best_lat$err_p50, best_lat$Latitude)),
+    sprintf("r = %+.2f", cor(best_lat$err_p50, log10(best_lat$total))),
+    with(best[which.max(abs(best$err_p50)), ],
+         sprintf("%s %d, %+.1f d", sub(", Maine$", "", Location), Year, err_p50))
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+Calibration removes most of the spatial structure: the residual's correlation
+with latitude falls to
+`r sprintf("%+.2f", cor(best_lat$err_p50, best_lat$Latitude))`
+from the +0.49 of @sec-compare. A southern excess survives — mean absolute
+error `r sprintf("%.1f", mean(abs(best_lat$err_p50[best_lat$Latitude < 45.5])))`
+days against `r sprintf("%.1f", mean(abs(best_lat$err_p50[best_lat$Latitude >= 45.5])))`
+in the north — so the gradient is corrected on average rather than explained.
+
+## What this model is and is not good for
+
+It predicts **timing**, out of sample, to about three days on the median and
+within five days four times out of five. That is enough to say when a flight
+season will be centred at a Maine locality given the year's weather, which is
+the operational question.
+
+It does not predict **how many** moths will be caught: the season total is an
+input, not an output. It also does not separate flight from trappability.
+Nightly weather is absent by design, and the model's own diagnostics show
+where that would pay: `r sprintf("%.0f%%", 100 * cnt_sum$zero_share)` of nights
+caught nothing, and the count variance is several thousand times the mean, so
+the nightly residual is dominated by night-to-night variation that a
+development model cannot address. Temperature, wind and precipitation at each
+locality-night are already extracted and would enter this model as covariates
+without changing anything else about it.
+
+One technical caveat for anyone refitting: the correction spline is a natural
+spline in days from the modelled median, and its behaviour beyond about
+\u00b115 days rests on few nights — the upturn at the far right of the fitted
+correction is an edge artefact, not a second flight period.
