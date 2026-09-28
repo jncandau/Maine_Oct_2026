@@ -25,6 +25,13 @@
 #             (network centroid), which R/09 found predicts better
 #     reg+lat plus a latitude interaction, to test once more whether
 #             site position adds anything after calibration
+#     pup+    the same calibration applied to bayessbw's predicted PUPATION
+#             distribution instead of BioSIM's flight curve, site by site
+#     pupreg+ and to one regional bayessbw run per year
+#
+#   The two bayessbw specifications need no lag constant: the correction is a
+#   spline in days from the driving curve's own median, so the interval
+#   between pupation and the catch is fitted rather than assumed.
 #
 # HOW THEY ARE SCORED
 #   Leave-one-year-out: every model is fitted without the held-out year and
@@ -52,18 +59,33 @@
 # =============================================================================
 
 library(dplyr)
+library(lubridate)
 library(splines)
+library(sbwFieldPheno)   # the fitted bayessbw posterior; see R/04
 
 
 ## ---- 1. Configuration -------------------------------------------------------
 
 reg_file   <- file.path("data", "interim",   "regional_daily.rds")
+pupreg_file <- file.path("data", "interim",   "regional_pupal.rds")
 out_file   <- file.path("data", "processed", "nightly_count_model.rds")
 
 ## Degrees of freedom for the two splines: the climatological seasonal curve
 ## and the correction in days from the modelled median.
 df_clim <- 5
 df_corr <- 4
+
+## Regional bayessbw run: same settings as R/04, and the same 1 March to
+## 31 August window, so that the regional run differs from the site-specific
+## one only in its weather.
+colony        <- "NB"
+window_months <- 3:8
+n_post        <- 100
+individuals   <- 100
+seed          <- 1978
+
+## Days on which every driving curve is evaluated.
+doy_grid <- 120:280
 
 ## Regional BioSIM point: replicates per year, averaged.
 n_reps       <- 5
@@ -125,6 +147,69 @@ if (reuse && file.exists(reg_file)) {
 }
 
 
+## ---- 3b. Pupation curves from bayessbw --------------------------------------
+## A predicted pupation distribution is a simulated population of dates. The
+## underlying distribution is continuous, so the 100 individual dates of the
+## median population are smoothed with a Gaussian kernel and evaluated on
+## whole days, then scaled to percent so that the floor below is comparable
+## with BioSIM's percentage curves.
+
+pupal_curve <- function(days, grid = doy_grid) {
+  d <- stats::density(days, from = min(grid), to = max(grid), n = length(grid))
+  tibble::tibble(doy = grid, pct = 100 * d$y / sum(d$y))
+}
+
+pupal_population <- readRDS(file.path("data", "processed", "pupal_population.rds"))
+
+pupal_site <- pupal_population %>%
+  semi_join(cmp, by = c("Location", "Year")) %>%
+  group_by(Location, Year) %>%
+  reframe(pupal_curve(pupation_jday)) %>%
+  rename(flight_pup = pct)
+
+p50_pup <- pupal_population %>%
+  semi_join(cmp, by = c("Location", "Year")) %>%
+  group_by(Location, Year) %>%
+  summarise(p50_pup = stats::median(pupation_jday), .groups = "drop")
+
+## The regional run: bayessbw driven by the hourly temperature averaged over
+## every locality, exactly as in R/09 (that script kept only the median, so
+## the full population is recomputed here).
+median_population <- function(m) apply(apply(m, 2, sort), 1, median)
+
+regional_weather <- function(yr, weather_hourly) {
+  weather_hourly %>%
+    filter(Year == yr) %>%
+    select(Weather) %>%
+    tidyr::unnest(Weather) %>%
+    mutate(Date = as.Date(datetime_est), Hour = hour(datetime_est)) %>%
+    filter(month(Date) %in% window_months) %>%
+    group_by(Date, Hour) %>%
+    summarise(Temp = mean(Temp), .groups = "drop") %>%
+    arrange(Date, Hour)
+}
+
+if (reuse && file.exists(pupreg_file)) {
+  regional_pupal <- readRDS(pupreg_file)
+} else {
+  weather_hourly <- readRDS(file.path("data", "processed", "weather_hourly.rds"))
+  RNGkind("L'Ecuyer-CMRG")
+  set.seed(seed)
+  regional_pupal <- bind_rows(lapply(years, function(yr) {
+    m <- dev_days(weather = regional_weather(yr, weather_hourly),
+                  sbwcolony = colony, period = "hour", stage = "Pupa",
+                  ecdf = FALSE, n.post = n_post, individuals = individuals)
+    pop <- median_population(m)
+    pupal_curve(pop) %>% mutate(Year = yr, p50_pupreg = stats::median(pop))
+  }))
+  dir.create(file.path("data", "interim"), showWarnings = FALSE, recursive = TRUE)
+  saveRDS(regional_pupal, pupreg_file)
+}
+
+regional_pupal_curve <- select(regional_pupal, Year, doy, flight_pupreg = pct)
+p50_pupreg <- distinct(regional_pupal, Year, p50_pupreg)
+
+
 ## ---- 4. One row per trapped night -------------------------------------------
 ## Each night carries the modelled flight percentage from both curves and its
 ## distance from each curve's median. A small floor keeps log() finite on
@@ -151,17 +236,28 @@ p50_reg <- regional_daily %>%
 nights <- nights %>%
   left_join(biosim_daily, by = c("Location", "Year", "doy")) %>%
   left_join(regional_daily, by = c("Year", "doy")) %>%
+  left_join(pupal_site, by = c("Location", "Year", "doy")) %>%
+  left_join(regional_pupal_curve, by = c("Year", "doy")) %>%
   left_join(p50_site, by = c("Location", "Year")) %>%
   left_join(p50_reg, by = "Year") %>%
+  left_join(p50_pup, by = c("Location", "Year")) %>%
+  left_join(p50_pupreg, by = "Year") %>%
   left_join(select(cmp, Location, Year, Latitude), by = c("Location", "Year")) %>%
   mutate(site_year   = paste(Location, Year),
+         ## Nights outside the evaluation grid get the floor, as do nights the
+         ## curves put outside their season.
          log_site    = log(pmax(flight_site, floor_pct)),
          log_reg     = log(pmax(flight_reg,  floor_pct)),
+         log_pup     = log(pmax(coalesce(flight_pup,    0), floor_pct)),
+         log_pupreg  = log(pmax(coalesce(flight_pupreg, 0), floor_pct)),
          delta_site  = doy - p50_site,
          delta_reg   = doy - p50_reg,
+         delta_pup   = doy - p50_pup,
+         delta_pupreg = doy - p50_pupreg,
          lat_c       = Latitude - mean(Latitude))
 
-stopifnot(!any(is.na(nights$flight_site)), !any(is.na(nights$flight_reg)))
+stopifnot(!any(is.na(nights$flight_site)), !any(is.na(nights$flight_reg)),
+          !any(is.na(nights$delta_pup)),   !any(is.na(nights$delta_pupreg)))
 
 
 ## ---- 5. Model specifications -------------------------------------------------
@@ -172,6 +268,8 @@ stopifnot(!any(is.na(nights$flight_site)), !any(is.na(nights$flight_reg)))
 basis_clim <- ns(nights$doy,        df = df_clim)
 basis_corr <- ns(nights$delta_site, df = df_corr)
 basis_creg <- ns(nights$delta_reg,  df = df_corr)
+basis_cpup <- ns(nights$delta_pup,    df = df_corr)
+basis_cpre <- ns(nights$delta_pupreg, df = df_corr)
 
 covariates <- list(
   clim      = basis_clim,
@@ -181,7 +279,9 @@ covariates <- list(
   `reg+`    = cbind(log_reg  = nights$log_reg,  basis_creg),
   `reg+lat` = cbind(log_reg  = nights$log_reg,  basis_creg,
                     lat = nights$lat_c,
-                    basis_creg * nights$lat_c)
+                    basis_creg * nights$lat_c),
+  `pup+`    = cbind(log_pup    = nights$log_pup,    basis_cpup),
+  `pupreg+` = cbind(log_pupreg = nights$log_pupreg, basis_cpre)
 )
 
 ## Predicted shares within each locality-year, from the covariate part only.

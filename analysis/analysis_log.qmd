@@ -1851,6 +1851,12 @@ cnt_best <- cnt_cv |>
             rmse   = sqrt(mean(err_p50^2)),
             bias   = mean(err_p50),
             within = mean(abs(err_p50) <= 5))
+
+cnt_best_all <- cnt_cv |>
+  group_by(model) |>
+  summarise(mae      = mean(abs(err_p50)),
+            per_moth = sum(loglik * nights_n) / sum(total),
+            .groups  = "drop")
 ```
 
 Everything so far has compared summary dates. This section asks the
@@ -1879,8 +1885,15 @@ scores them leave-one-year-out.
 | `site+` | plus a spline correction in days from the modelled median |
 | `reg+` | the same, driven by one regional BioSIM curve per year |
 | `reg+lat` | plus a latitude interaction |
+| `pup+` | the same calibration applied to bayessbw's predicted pupation distribution instead of BioSIM's flight curve, locality by locality |
+| `pupreg+` | and to one regional bayessbw run per year |
 
-: The six specifications {#tbl-count-models}
+: The eight specifications {#tbl-count-models}
+
+The two bayessbw rows need no lag constant. The correction is a spline in days
+from the driving curve's own median, so the interval between pupation and the
+catch is fitted rather than assumed — which is what made the shifted series on
+@fig-compare uninformative about level and is repaired here.
 
 ```{r}
 #| label: tbl-count-scores
@@ -1899,7 +1912,7 @@ cnt_cv |>
   kable(align = c("l", "r", "r", "r", "r", "r"))
 ```
 
-Three things come out of that table.
+Four things come out of that table.
 
 **A calibrated regional curve is the best predictor**, and it is a usable one:
 `r sprintf("%.1f", cnt_best$mae)` days of mean absolute error on the median
@@ -1913,6 +1926,25 @@ loses to a seasonal average fitted from other years, on both the likelihood
 and the median. Giving it a free exponent helps, a shape correction does not,
 and replacing the site curve with the single regional one helps most. Latitude
 makes things worse again, for the fourth time in this log.
+
+**The pupation distribution does not do better than the flight curve.**
+Applied locality by locality it lands where BioSIM's site curve does
+(`r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "pup+"])` days
+against `r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "site+"])`),
+and the regional bayessbw run is the weaker of the two
+(`r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "pupreg+"])` days)
+— the opposite of BioSIM, where going regional helped most. Both bayessbw
+specifications are almost unbiased, which is the spline absorbing the
+pupation-to-catch interval as intended, but they are less sharp: a mean log
+predicted share of
+`r sprintf("%.2f", cnt_best_all$per_moth[cnt_best_all$model == "pup+"])`
+and `r sprintf("%.2f", cnt_best_all$per_moth[cnt_best_all$model == "pupreg+"])`
+against `r sprintf("%.2f", cnt_best_all$per_moth[cnt_best_all$model == "reg+"])`
+for the best. Two independent development models place pupation within a day
+of each other, so this is not a disagreement about the date; it is that
+bayessbw's year-to-year placement carries less of the signal the catches
+follow, consistent with its weaker year-mean correlation in
+@tbl-compare-structure.
 
 **The fitted exponent on the regional curve is
 `r sprintf("%.2f", cnt_sum$exponent)`.** That is the quiet headline: the
