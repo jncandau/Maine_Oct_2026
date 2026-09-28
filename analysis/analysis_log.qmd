@@ -2074,3 +2074,155 @@ One technical caveat for anyone refitting: the correction spline is a natural
 spline in days from the modelled median, and its behaviour beyond about
 \u00b115 days rests on few nights — the upturn at the far right of the fitted
 correction is an edge artefact, not a second flight period.
+
+# Findings so far {#sec-summary}
+
+```{r}
+#| label: summary-data
+## Everything here is taken from the objects loaded by the sections above, so
+## the summary cannot drift from the analysis it summarises.
+sy <- list(
+  records    = nrow(trap_records),
+  localities = n_distinct(trap_records$locality),
+  years      = n_distinct(trap_records$year),
+  yr_from    = min(trap_records$year),
+  yr_to      = max(trap_records$year),
+  nights     = sum(trap_daily$status == "counted"),
+  usable     = sum(trap_records$usable_phenology),
+  comparable = nrow(cmp),
+  hours      = sum(vapply(weather_hourly$Weather, nrow, integer(1))),
+  complete   = sum(biosim_flight$flight_complete),
+  bio_p50    = mean(biosim_flight$p50),
+  pup_p50    = mean(pupal_phenology$p50),
+  pup_spread = mean(pupal_phenology$spread),
+  pup_post   = mean(pupal_phenology$post_hi - pupal_phenology$post_lo),
+  off_p50    = median(cmp$d_p50),
+  off_p05    = median(cmp$d_p05),
+  off_p95    = median(cmp$d_p95),
+  lag_bayes  = median(cmp$lag_bayes),
+  lag_biosim = median(cmp$lag_biosim),
+  r_year     = with(cmp |> group_by(Year) |> filter(n() >= 5) |>
+                      summarise(s = mean(sim_p50), o = mean(obs_p50),
+                                .groups = "drop"), cor(s, o)),
+  r_within   = cor(residuals(lm(sim_p50 ~ factor(Year), cmp)),
+                   residuals(lm(obs_p50 ~ factor(Year), cmp))),
+  r_models   = cor(cmp$d_p50, cmp$d_p50_bayes)
+)
+```
+
+## The data
+
+`r sy$records` Maine light-trap records from the Rhainds compilation cover
+`r sy$localities` localities and `r sy$years` years
+(`r sy$yr_from`–`r sy$yr_to`), with
+`r format(sy$nights, big.mark = ",")` counted trap-nights, every record above
+99 moths for the season. The minimum-effort rule of @sec-traps marks
+`r sy$usable` records as usable for percentile phenology; intersected with the
+modelled cohorts that finish flight, **`r sy$comparable` locality-years** carry
+a meaningful model-versus-observed comparison. Hourly CaSR weather was
+extracted for all `r sy$records` locality-years
+(`r format(round(sy$hours / 1e6, 2), nsmall = 2)` million hours).
+
+## Two development models that agree with each other
+
+BioSIM's `Spruce_Budworm_Biology` and the Bayesian model of bayessbw were
+fitted to different data, by different methods, and were driven by different
+weather — BioSIM's own station network against the CaSR grid. They place
+pupation within a day of each other (@tbl-pupal-vs-biosim), and both put the
+observed median catch about a fortnight after predicted pupation
+(`r sprintf("%.1f", sy$lag_bayes)` d for bayessbw,
+`r sprintf("%.1f", sy$lag_biosim)` d for BioSIM). In the pupation model,
+individual variation exceeds parameter uncertainty about fourfold: a
+population takes `r sprintf("%.1f", sy$pup_spread)` days to pupate from p05 to
+p95, while the posterior places its median to within
+`r sprintf("%.1f", sy$pup_post)` days.
+
+## The central finding
+
+Against the catches, modelled flight is early by a median
+`r sprintf("%.1f", abs(sy$off_p50))` days at p50
+(`r sprintf("%.1f", abs(sy$off_p05))` d at p05,
+`r sprintf("%.1f", abs(sy$off_p95))` d at p95). That average hides a split:
+year means correlate at `r sprintf("%.2f", sy$r_year)`, but within a year
+across localities the correlation is `r sprintf("%.2f", sy$r_within)`.
+
+The reason is a **gradient-slope error**. Both models spread flight across
+Maine about seven times more steeply with latitude than the catches do
+(@tbl-sync-gradient): `r sprintf("%+.2f", sync_grad$d_per_degree[1])` days per
+degree observed, against `r sprintf("%+.2f", sync_grad$d_per_degree[2])`
+(BioSIM) and `r sprintf("%+.2f", sync_grad$d_per_degree[3])` (bayessbw) — 
+`r sprintf("%.1f", sync_sum$obs_spread)` days of observed spread across the
+network against `r sprintf("%.1f", sync_sum$sim_spread)` and
+`r sprintf("%.1f", sync_sum$bayes_spread)` modelled. Flight in Maine is
+essentially synchronous, and the apparent "early in the south" offset is the
+difference between a steep modelled gradient and a flat real one. The two
+models' offsets correlate at `r sprintf("%.2f", sy$r_models)`, locality-year
+by locality-year, which is why the same error appears in both.
+
+## Five explanations tested and set aside
+
+| Candidate | Evidence against it | Where |
+|-----------|---------------------|-------|
+| The weather source | both models make the same spatial error on different weather (offsets correlate `r sprintf("%.2f", sy$r_models)`) | @sec-compare |
+| A temperature-driven pupal stage | degree-days beat a constant lag by `r sprintf("%.2f", lag_sum$cv_rmse_A - lag_sum$cv_rmse_B)` d out of sample; the interval's correlation with post-pupation temperature is `r sprintf("%+.2f", lag_sum$r_lag_tpost)` and a spline on it reaches R² `r sprintf("%.3f", lag_sum$spline_r2)`; `r sprintf("%.0f%%", lag_sum$var_share[1])` of its variance is between localities | @sec-lag |
+| Elevation and topography | all `r elev_sum$n_localities` elevations measured (`r sprintf("%.0f", elev_sum$elev_range[1])`–`r sprintf("%.0f", elev_sum$elev_range[2])` m); supplying them shifts flight `r sprintf("%+.1f", elev_sum$mean_shift)` d and leaves the gradient at `r sprintf("%+.1f", elev_sum$grad_usgs)` d per degree | @sec-elev |
+| A detection threshold at low catch | small catches carry *more* of their catch after the modelled window and have slightly wider curves — the opposite of clipping | @sec-compare |
+| Nightly-scale immigration | `r sync_sum$n_pairs` within-year locality pairs give a median nightly correlation of `r sprintf("%.2f", sync_sum$r0_median)` against a shuffled-year null of `r sprintf("%.2f", sync_sum$null_median)`, decaying with distance, weakest north–south, at zero lag | @sec-sync |
+
+: What the residual is not {#tbl-summary-ruled-out}
+
+Catch size survives as a second, weaker and near-independent site covariate:
+`r sprintf("%+.2f", coef(lm(d_p50 ~ Latitude + log10(season_total), cmp))[["log10(season_total)"]])`
+days per tenfold catch against
+`r sprintf("%+.2f", coef(lm(d_p50 ~ Latitude + log10(season_total), cmp))[["Latitude"]])`
+days per degree of latitude, and with no effect within a locality.
+
+## What predicts the flight season
+
+Site-specific weather makes both models worse than a single regional series
+(@tbl-regional). Built into the nightly count model of @sec-count, the
+calibrated regional curve predicts a held-out year's median catch date to
+`r sprintf("%.2f", cnt_best$mae)` days of mean absolute error, bias
+`r sprintf("%+.2f", cnt_best$bias)` d, with
+`r sprintf("%.0f%%", 100 * cnt_best$within)` of locality-years inside five
+days — against `r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "clim"])`
+days for a seasonal climatology.
+
+Two qualifications matter for using it. First, the development model
+contributes **the date, not the shape**: with an exponent of
+`r sprintf("%.2f", cnt_sum$exponent)` on the modelled curve, deleting the
+curve entirely and keeping only its median plus the empirical correction costs
+nothing on timing (`r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "reg-med"])`
+days). BioSIM's uncorrected site curve, meanwhile, buys nothing over
+climatology — it ties on mean absolute error and is worse on RMSE, on the
+nightly likelihood and on bias. Second, the calibrated prediction is
+**over-dispersed**: it widens the predicted central 90% to
+`r sprintf("%.1f", cnt_sum$cal_width)` days against
+`r sprintf("%.1f", cnt_sum$obs_width)` observed, so an interval read straight
+off the fitted curve is conservative.
+
+bayessbw's pupation distribution does not improve on this
+(`r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "pup+"])` d
+site-specific, `r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "pupreg+"])` d
+regional). Its value in this project is as the independent check on pupation
+timing, not as the driver of the prediction.
+
+## What is still open
+
+- **Nightly weather is absent from every model here.** It is the only
+  remaining route to separate "the moths were not flying" from "the trap did
+  not catch them", and the temperature, wind and precipitation series are
+  already extracted per locality-night; they would enter the count model of
+  @sec-count as covariates without changing anything else about it.
+- **Immigration is not excluded, only unsupported at the nightly scale.**
+  Arrivals need not be simultaneous across localities, and no systematic
+  search for second modes has been made across the `r sy$comparable` curves.
+  Millinocket in 1980 (@fig-catch-shape) is the one panel that looks like an
+  influx.
+- **The southern excess survives calibration.** The count model's residual
+  correlates only `r sprintf("%+.2f", cor(cnt_cv$err_p50[cnt_cv$model == "reg+"], cnt_nights$Latitude[match(cnt_cv$site_year[cnt_cv$model == "reg+"], cnt_nights$site_year)]))`
+  with latitude, but southern localities are still fitted about a day worse
+  than northern ones, so the gradient is corrected on average rather than
+  explained.
+- **Abundance is not modelled at all.** Every result here is about timing; the
+  season total is an input to the predictive model, never an output.
