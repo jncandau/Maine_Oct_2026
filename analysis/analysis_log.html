@@ -2233,6 +2233,7 @@ vertical-align: -.125em;
   <li><a href="#what-this-says-about-immigration" id="toc-what-this-says-about-immigration" class="nav-link" data-scroll-target="#what-this-says-about-immigration"><span class="header-section-number">7.3</span> What this says about immigration</a></li>
   <li><a href="#sec-elev" id="toc-sec-elev" class="nav-link" data-scroll-target="#sec-elev"><span class="header-section-number">7.4</span> Is the gradient an elevation error?</a></li>
   <li><a href="#how-precisely-does-the-location-have-to-be-right" id="toc-how-precisely-does-the-location-have-to-be-right" class="nav-link" data-scroll-target="#how-precisely-does-the-location-have-to-be-right"><span class="header-section-number">7.5</span> How precisely does the location have to be right?</a></li>
+  <li><a href="#sec-regional" id="toc-sec-regional" class="nav-link" data-scroll-target="#sec-regional"><span class="header-section-number">7.6</span> Does site-specific weather help at all?</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -5447,7 +5448,7 @@ Table 44: Nightly synchrony against separation
 <p>The hypothesis survives at the seasonal scale and fails at the nightly one. The more parsimonious reading of both results is that real flight across Maine is nearly synchronous and that both development models exaggerate how strongly latitude and temperature spread it: the gradient is wrong, rather than the southern catch being foreign.</p>
 <p>One caveat keeps immigration alive: arrivals need not be simultaneous across localities, because the wind fields differ from night to night, so weak north–south nightly correlation is not proof of absence.</p>
 <p>A second candidate — that the gradient is really topography, since BioSIM was run with <code>elev = NaN</code> and the CaSR extraction carries no terrain — is tested in <a href="#sec-elev" class="quarto-xref">Section 7.4</a> below and ruled out.</p>
-<p>The cheapest next test follows directly: if flight really is regionally synchronous, a model driven by one regional mean temperature series should predict the catches about as well as the site-specific runs do. That is one re-run of the existing pipeline on an averaged weather series, and it would put a number on how much site-specific weather is buying us.</p>
+<p>That leads directly to a test of how much site-specific weather is buying us at all, which is <a href="#sec-regional" class="quarto-xref">Section 7.6</a> below: if flight is regionally synchronous, one regional weather series should predict the catches about as well as a model run at each trap’s own coordinates.</p>
 </section>
 <section id="sec-elev" class="level2" data-number="7.4">
 <h2 data-number="7.4" class="anchored" data-anchor-id="sec-elev"><span class="header-section-number">7.4</span> Is the gradient an elevation error?</h2>
@@ -5568,6 +5569,276 @@ Table 46: The coastal locality of the scan, displaced eastwards in steps of lon
 </div>
 </div>
 <p>That is not a lapse rate or a distance effect; it is what a discrete set of source weather stations looks like when a point crosses from one interpolation neighbourhood into another. Two consequences. A modelled date cannot be attributed to a trap more finely than a few days at a coastal site, which matters because the recorded coordinates in this dataset carry a stated uncertainty of one to eight kilometres — though that uncertainty does not predict the size of the offset (<a href="#sec-compare" class="quarto-xref">Section 6</a>), so this behaves as noise rather than as a bias. And a locality must always be queried at its recorded coordinates: an earlier version of this work used a coordinate rounded to two decimals from memory, landed 1.5 km away, and read that as evidence that BioSIM’s elevation model was wrong at the coast. It was not.</p>
+</section>
+<section id="sec-regional" class="level2" data-number="7.6">
+<h2 data-number="7.6" class="anchored" data-anchor-id="sec-regional"><span class="header-section-number">7.6</span> Does site-specific weather help at all?</h2>
+<p>If flight is as synchronous as <a href="#sec-sync" class="quarto-xref">Section 7</a> suggests, a model driven by one regional weather series — a single prediction per year, the same for every locality — should predict the catches about as well as the site-specific runs. <code>R/09_regional_weather_test.R</code> builds that comparison. The regional BioSIM run is one point at the centroid of the trap network (45.64 °N, 69.12 °W); the regional bayessbw run is the same simulation as <a href="#sec-lag" class="quarto-xref">Section 6.4</a> driven by the hourly temperature averaged over all localities. Each predictor is given one intercept, fitted on the other years, so a constant bias is not charged against any of them and none is scored on its own year.</p>
+<div class="cell">
+<div id="tbl-regional" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-regional-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 47: Predicting the observed median catch date over the 170 comparable locality-years, with a leave-one-year-out intercept
+</figcaption>
+<div aria-describedby="tbl-regional-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 40%">
+<col style="width: 22%">
+<col style="width: 6%">
+<col style="width: 12%">
+<col style="width: 10%">
+<col style="width: 7%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Predictor</th>
+<th style="text-align: left;">varies by site</th>
+<th style="text-align: right;">n</th>
+<th style="text-align: right;">RMSE, d</th>
+<th style="text-align: right;">MAE, d</th>
+<th style="text-align: right;">r</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">BioSIM, site-specific</td>
+<td style="text-align: left;">yes</td>
+<td style="text-align: right;">170</td>
+<td style="text-align: right;">6.51</td>
+<td style="text-align: right;">4.96</td>
+<td style="text-align: right;">0.49</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">BioSIM, one regional point</td>
+<td style="text-align: left;">no</td>
+<td style="text-align: right;">170</td>
+<td style="text-align: right;">4.29</td>
+<td style="text-align: right;">3.39</td>
+<td style="text-align: right;">0.67</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">bayessbw, site-specific</td>
+<td style="text-align: left;">yes</td>
+<td style="text-align: right;">170</td>
+<td style="text-align: right;">6.50</td>
+<td style="text-align: right;">4.95</td>
+<td style="text-align: right;">0.40</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">bayessbw, one regional run</td>
+<td style="text-align: left;">no</td>
+<td style="text-align: right;">170</td>
+<td style="text-align: right;">5.14</td>
+<td style="text-align: right;">4.10</td>
+<td style="text-align: right;">0.52</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Other localities that year</td>
+<td style="text-align: left;">yes</td>
+<td style="text-align: right;">169</td>
+<td style="text-align: right;">3.62</td>
+<td style="text-align: right;">2.59</td>
+<td style="text-align: right;">0.77</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Site-specific weather does not merely fail to help. <strong>It makes both models worse.</strong> Replacing the site-specific run with a single regional series changes the error by -2.22 days for BioSIM and -1.36 days for bayessbw, and raises the correlation with the observed dates from 0.49 to 0.67 and from 0.40 to 0.52. One number per year beats a model run at each trap’s own coordinates.</p>
+<p>The last line of the table is the floor: the mean observed date of the <em>other</em> localities trapped in the same year, which is what a perfect regional predictor would look like. At 3.62 days it is only 0.67 days better than regional BioSIM, so the regional run already captures most of the predictable signal, and what the site-specific runs add on top of it is error.</p>
+<div class="cell">
+<div id="tbl-regional-years" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-regional-years-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 48: The regional predictions year by year, against the mean observed date. The intercepts of <a href="#tbl-regional" class="quarto-xref">Table 47</a> are not applied here, so the columns differ by a constant
+</figcaption>
+<div aria-describedby="tbl-regional-years-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 6%">
+<col style="width: 13%">
+<col style="width: 17%">
+<col style="width: 19%">
+<col style="width: 20%">
+<col style="width: 22%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Year</th>
+<th style="text-align: right;">localities</th>
+<th style="text-align: right;">observed mean</th>
+<th style="text-align: right;">BioSIM regional</th>
+<th style="text-align: right;">BioSIM site mean</th>
+<th style="text-align: right;">bayessbw regional</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">1968</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">198.5</td>
+<td style="text-align: right;">198.8</td>
+<td style="text-align: right;">190.3</td>
+<td style="text-align: right;">182.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1969</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">199.0</td>
+<td style="text-align: right;">203.4</td>
+<td style="text-align: right;">196.8</td>
+<td style="text-align: right;">184.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1970</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">192.0</td>
+<td style="text-align: right;">200.6</td>
+<td style="text-align: right;">192.4</td>
+<td style="text-align: right;">183.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1971</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">197.3</td>
+<td style="text-align: right;">196.6</td>
+<td style="text-align: right;">193.2</td>
+<td style="text-align: right;">182.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1972</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">197.2</td>
+<td style="text-align: right;">197.7</td>
+<td style="text-align: right;">193.2</td>
+<td style="text-align: right;">184.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1973</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">190.8</td>
+<td style="text-align: right;">194.4</td>
+<td style="text-align: right;">191.2</td>
+<td style="text-align: right;">181.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1974</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: right;">197.8</td>
+<td style="text-align: right;">198.5</td>
+<td style="text-align: right;">196.8</td>
+<td style="text-align: right;">185.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1975</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: right;">186.8</td>
+<td style="text-align: right;">190.2</td>
+<td style="text-align: right;">186.2</td>
+<td style="text-align: right;">177.5</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1976</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">187.0</td>
+<td style="text-align: right;">190.3</td>
+<td style="text-align: right;">186.1</td>
+<td style="text-align: right;">174.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1977</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">195.5</td>
+<td style="text-align: right;">196.4</td>
+<td style="text-align: right;">190.4</td>
+<td style="text-align: right;">179.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1978</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">188.7</td>
+<td style="text-align: right;">195.3</td>
+<td style="text-align: right;">188.2</td>
+<td style="text-align: right;">178.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1979</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">193.0</td>
+<td style="text-align: right;">194.4</td>
+<td style="text-align: right;">187.0</td>
+<td style="text-align: right;">171.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1980</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">196.7</td>
+<td style="text-align: right;">203.2</td>
+<td style="text-align: right;">194.8</td>
+<td style="text-align: right;">181.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1981</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">184.2</td>
+<td style="text-align: right;">188.2</td>
+<td style="text-align: right;">180.7</td>
+<td style="text-align: right;">172.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1982</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">198.0</td>
+<td style="text-align: right;">197.0</td>
+<td style="text-align: right;">191.6</td>
+<td style="text-align: right;">179.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1983</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">194.5</td>
+<td style="text-align: right;">195.2</td>
+<td style="text-align: right;">187.4</td>
+<td style="text-align: right;">177.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1984</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">190.1</td>
+<td style="text-align: right;">197.1</td>
+<td style="text-align: right;">190.5</td>
+<td style="text-align: right;">182.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1985</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">192.7</td>
+<td style="text-align: right;">198.2</td>
+<td style="text-align: right;">190.6</td>
+<td style="text-align: right;">183.0</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">1989</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">188.9</td>
+<td style="text-align: right;">189.6</td>
+<td style="text-align: right;">187.7</td>
+<td style="text-align: right;">179.0</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Two caveats on the comparison. The regional predictors cannot capture real site-to-site variation, because they are constant within a year — the result is not that no such variation exists, but that it is smaller than the error the models make when they try to represent it. And averaging temperature before running a development model is not the same as averaging the development of each site, since the rate curves are non-linear; the regional bayessbw run is a model of the average weather, not an average of the models.</p>
+<p>Taken with <a href="#sec-sync" class="quarto-xref">Section 7</a> this is the practical conclusion of the comparison. For predicting when spruce budworm flies in Maine, the useful signal in these models is the year, not the site; and a phenology model applied at a single trap’s coordinates will be wrong by about six days, mostly because it imposes a latitudinal gradient the moths do not follow.</p>
 </section>
 </section>
 

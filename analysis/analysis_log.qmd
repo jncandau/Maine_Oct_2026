@@ -1654,11 +1654,10 @@ A second candidate — that the gradient is really topography, since BioSIM was
 run with `elev = NaN` and the CaSR extraction carries no terrain — is tested
 in @sec-elev below and ruled out.
 
-The cheapest next test follows directly: if flight really is regionally
-synchronous, a model driven by one regional mean temperature series should
-predict the catches about as well as the site-specific runs do. That is one
-re-run of the existing pipeline on an averaged weather series, and it would
-put a number on how much site-specific weather is buying us.
+That leads directly to a test of how much site-specific weather is buying us
+at all, which is @sec-regional below: if flight is regionally synchronous, one
+regional weather series should predict the catches about as well as a model
+run at each trap's own coordinates.
 
 ## Is the gradient an elevation error? {#sec-elev}
 
@@ -1753,3 +1752,82 @@ coordinates: an earlier version of this work used a coordinate rounded to two
 decimals from memory, landed 1.5 km away, and read that as evidence that
 BioSIM's elevation model was wrong at the coast. It was not.
 
+## Does site-specific weather help at all? {#sec-regional}
+
+```{r}
+#| label: regional-data
+regional <- readRDS(file.path("data", "processed", "regional_weather_test.rds"))
+reg_scores <- regional$scores
+reg_rows   <- regional$rows
+reg_sum    <- regional$summary
+```
+
+If flight is as synchronous as @sec-sync suggests, a model driven by one
+regional weather series — a single prediction per year, the same for every
+locality — should predict the catches about as well as the site-specific runs.
+`R/09_regional_weather_test.R` builds that comparison. The regional BioSIM run
+is one point at the centroid of the trap network
+(`r sprintf("%.2f", reg_sum$centroid$Latitude)` °N,
+`r sprintf("%.2f", abs(reg_sum$centroid$Longitude))` °W); the regional
+bayessbw run is the same simulation as @sec-lag driven by the hourly
+temperature averaged over all localities. Each predictor is given one
+intercept, fitted on the other years, so a constant bias is not charged
+against any of them and none is scored on its own year.
+
+```{r}
+#| label: tbl-regional
+#| tbl-cap: "Predicting the observed median catch date over the 170 comparable locality-years, with a leave-one-year-out intercept"
+reg_scores |>
+  transmute(Predictor = predictor,
+            `varies by site` = ifelse(varies_by_site, "yes", "no"),
+            n,
+            `RMSE, d` = round(rmse, 2),
+            `MAE, d` = round(mae, 2),
+            `r` = round(r, 2)) |>
+  kable(align = c("l", "l", "r", "r", "r", "r"))
+```
+
+Site-specific weather does not merely fail to help. **It makes both models
+worse.** Replacing the site-specific run with a single regional series changes
+the error by `r sprintf("%+.2f", reg_sum$rmse_change)` days for BioSIM and
+`r sprintf("%+.2f", reg_sum$bayes_change)` days for bayessbw, and raises the
+correlation with the observed dates from 0.49 to 0.67 and from 0.40 to 0.52.
+One number per year beats a model run at each trap's own coordinates.
+
+The last line of the table is the floor: the mean observed date of the *other*
+localities trapped in the same year, which is what a perfect regional
+predictor would look like. At `r sprintf("%.2f", reg_scores$rmse[nrow(reg_scores)])`
+days it is only
+`r sprintf("%.2f", reg_scores$rmse[2] - reg_scores$rmse[nrow(reg_scores)])`
+days better than regional BioSIM, so the regional run already captures most
+of the predictable signal, and what the site-specific runs add on top of it is
+error.
+
+```{r}
+#| label: tbl-regional-years
+#| tbl-cap: "The regional predictions year by year, against the mean observed date. The intercepts of @tbl-regional are not applied here, so the columns differ by a constant"
+reg_rows |>
+  group_by(Year) |>
+  summarise(localities = n(),
+            `observed mean` = round(mean(obs_p50), 1),
+            `BioSIM regional` = round(first(biosim_regional), 1),
+            `BioSIM site mean` = round(mean(biosim_site), 1),
+            `bayessbw regional` = round(first(bayes_regional), 1),
+            .groups = "drop") |>
+  mutate(Year = as.character(Year)) |>
+  kable(align = c("l", "r", "r", "r", "r", "r"))
+```
+
+Two caveats on the comparison. The regional predictors cannot capture real
+site-to-site variation, because they are constant within a year — the result
+is not that no such variation exists, but that it is smaller than the error
+the models make when they try to represent it. And averaging temperature
+before running a development model is not the same as averaging the
+development of each site, since the rate curves are non-linear; the regional
+bayessbw run is a model of the average weather, not an average of the models.
+
+Taken with @sec-sync this is the practical conclusion of the comparison. For
+predicting when spruce budworm flies in Maine, the useful signal in these
+models is the year, not the site; and a phenology model applied at a single
+trap's coordinates will be wrong by about six days, mostly because it imposes
+a latitudinal gradient the moths do not follow.
