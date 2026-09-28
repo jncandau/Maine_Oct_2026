@@ -2231,6 +2231,8 @@ vertical-align: -.125em;
   <li><a href="#the-latitudinal-gradient" id="toc-the-latitudinal-gradient" class="nav-link" data-scroll-target="#the-latitudinal-gradient"><span class="header-section-number">7.1</span> The latitudinal gradient</a></li>
   <li><a href="#nightly-synchrony" id="toc-nightly-synchrony" class="nav-link" data-scroll-target="#nightly-synchrony"><span class="header-section-number">7.2</span> Nightly synchrony</a></li>
   <li><a href="#what-this-says-about-immigration" id="toc-what-this-says-about-immigration" class="nav-link" data-scroll-target="#what-this-says-about-immigration"><span class="header-section-number">7.3</span> What this says about immigration</a></li>
+  <li><a href="#sec-elev" id="toc-sec-elev" class="nav-link" data-scroll-target="#sec-elev"><span class="header-section-number">7.4</span> Is the gradient an elevation error?</a></li>
+  <li><a href="#how-precisely-does-the-location-have-to-be-right" id="toc-how-precisely-does-the-location-have-to-be-right" class="nav-link" data-scroll-target="#how-precisely-does-the-location-have-to-be-right"><span class="header-section-number">7.5</span> How precisely does the location have to be right?</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -5443,8 +5445,129 @@ Table 44: Nightly synchrony against separation
 <section id="what-this-says-about-immigration" class="level2" data-number="7.3">
 <h2 data-number="7.3" class="anchored" data-anchor-id="what-this-says-about-immigration"><span class="header-section-number">7.3</span> What this says about immigration</h2>
 <p>The hypothesis survives at the seasonal scale and fails at the nightly one. The more parsimonious reading of both results is that real flight across Maine is nearly synchronous and that both development models exaggerate how strongly latitude and temperature spread it: the gradient is wrong, rather than the southern catch being foreign.</p>
-<p>Two caveats keep immigration alive. Arrivals need not be simultaneous across localities, because the wind fields differ from night to night, so weak north–south nightly correlation is not proof of absence. And elevation is absent from the whole analysis — BioSIM was run with <code>elev = NaN</code> and the CaSR extraction carries no terrain — so part of what is called a latitudinal gradient here could be topographic.</p>
+<p>One caveat keeps immigration alive: arrivals need not be simultaneous across localities, because the wind fields differ from night to night, so weak north–south nightly correlation is not proof of absence.</p>
+<p>A second candidate — that the gradient is really topography, since BioSIM was run with <code>elev = NaN</code> and the CaSR extraction carries no terrain — is tested in <a href="#sec-elev" class="quarto-xref">Section 7.4</a> below and ruled out.</p>
 <p>The cheapest next test follows directly: if flight really is regionally synchronous, a model driven by one regional mean temperature series should predict the catches about as well as the site-specific runs do. That is one re-run of the existing pipeline on an averaged weather series, and it would put a number on how much site-specific weather is buying us.</p>
+</section>
+<section id="sec-elev" class="level2" data-number="7.4">
+<h2 data-number="7.4" class="anchored" data-anchor-id="sec-elev"><span class="header-section-number">7.4</span> Is the gradient an elevation error?</h2>
+<p>Elevation is the obvious suspect for a gradient that is too steep. <code>R/03</code> leaves it unspecified, so BioSIM takes it from its own digital elevation model, and elevation is itself a latitude proxy in this network: the southern localities are coastal lowlands and the northern ones sit above 300 m (median 68 m against 303 m, r = 0.56 with latitude). <code>R/08_elevation_check.R</code> fetches an elevation for every locality from the USGS 3DEP point-query service — 7 to 573 m, median 218 — and asks BioSIM the same question twice, once with its own elevation model and once with the measured value.</p>
+<p>Elevation does move the model. Over the plausible range of 100 to 500 m the flight date shifts by -1.8 d per 100 m at Blue Hill Township and +1.5 d per 100 m at Clayton Lake, against a run-to-run noise of about a tenth of a day. The two signs are not a typo: at the coastal locality a <em>higher</em> assumed elevation brings flight <em>earlier</em>, which cannot be a lapse rate and suggests that elevation also enters BioSIM’s choice and weighting of source weather stations — coastal stations at low elevation have cool summers. The mechanism is not established here; what matters is that the model is demonstrably sensitive.</p>
+<div class="cell">
+<div id="tbl-elev-test" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-elev-test-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 45: Modelled flight with BioSIM’s own elevation model against modelled flight with the measured elevation, over a sample of locality-years spanning the latitude range
+</figcaption>
+<div aria-describedby="tbl-elev-test-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 57%">
+<col style="width: 42%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Quantity</th>
+<th style="text-align: right;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Locality-years compared</td>
+<td style="text-align: right;">20</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Mean shift when the measured elevation is supplied</td>
+<td style="text-align: right;">+0.1 d</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Mean shift, southern localities</td>
+<td style="text-align: right;">+0.1 d</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Mean shift, northern localities</td>
+<td style="text-align: right;">+0.1 d</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Mean absolute offset against the catches</td>
+<td style="text-align: right;">7.8 d &lt;U+2192&gt; 7.7 d</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Latitude gradient of modelled flight</td>
+<td style="text-align: right;">+6.12 &lt;U+2192&gt; +5.85 d per &lt;U+00B0&gt;N</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Latitude gradient of the observed catches</td>
+<td style="text-align: right;">-0.11 d per &lt;U+00B0&gt;N</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>BioSIM’s elevation model is already right at these localities. Supplying the measured value moves the flight date by a few tenths of a day — of the same order as the replicate-to-replicate variation of the service itself — leaves the mean offset against the catches where it was, and does not touch the gradient, which stays near six days per degree against an observed tenth of a day. A full re-run with elevation, one switch in <code>R/03</code>, would not change any conclusion in this log, so it has not been made.</p>
+</section>
+<section id="how-precisely-does-the-location-have-to-be-right" class="level2" data-number="7.5">
+<h2 data-number="7.5" class="anchored" data-anchor-id="how-precisely-does-the-location-have-to-be-right"><span class="header-section-number">7.5</span> How precisely does the location have to be right?</h2>
+<p>The elevation work turned up something that does matter. A modelled date at a coastal locality is not a smooth function of where the point is: displacing the same trap eastwards in steps, with BioSIM’s own elevation model each time, moves the answer by three days inside the first kilometre and then wanders back.</p>
+<div class="cell">
+<div id="tbl-elev-coords" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-elev-coords-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 46: The coastal locality of the scan, displaced eastwards in steps of longitude
+</figcaption>
+<div aria-describedby="tbl-elev-coords-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: right;">displacement, km</th>
+<th style="text-align: right;">flight p50</th>
+<th style="text-align: right;">shift, d</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: right;">0.00</td>
+<td style="text-align: right;">181.7</td>
+<td style="text-align: right;">+0.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">0.40</td>
+<td style="text-align: right;">181.9</td>
+<td style="text-align: right;">+0.2</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">0.79</td>
+<td style="text-align: right;">178.7</td>
+<td style="text-align: right;">-3.0</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">1.59</td>
+<td style="text-align: right;">179.0</td>
+<td style="text-align: right;">-2.7</td>
+</tr>
+<tr class="odd">
+<td style="text-align: right;">3.97</td>
+<td style="text-align: right;">181.2</td>
+<td style="text-align: right;">-0.5</td>
+</tr>
+<tr class="even">
+<td style="text-align: right;">7.95</td>
+<td style="text-align: right;">182.7</td>
+<td style="text-align: right;">+1.1</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>That is not a lapse rate or a distance effect; it is what a discrete set of source weather stations looks like when a point crosses from one interpolation neighbourhood into another. Two consequences. A modelled date cannot be attributed to a trap more finely than a few days at a coastal site, which matters because the recorded coordinates in this dataset carry a stated uncertainty of one to eight kilometres — though that uncertainty does not predict the size of the offset (<a href="#sec-compare" class="quarto-xref">Section 6</a>), so this behaves as noise rather than as a bias. And a locality must always be queried at its recorded coordinates: an earlier version of this work used a coordinate rounded to two decimals from memory, landed 1.5 km away, and read that as evidence that BioSIM’s elevation model was wrong at the coast. It was not.</p>
 </section>
 </section>
 

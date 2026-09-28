@@ -1646,15 +1646,110 @@ Maine is nearly synchronous and that both development models exaggerate how
 strongly latitude and temperature spread it: the gradient is wrong, rather
 than the southern catch being foreign.
 
-Two caveats keep immigration alive. Arrivals need not be simultaneous across
+One caveat keeps immigration alive: arrivals need not be simultaneous across
 localities, because the wind fields differ from night to night, so weak
-north–south nightly correlation is not proof of absence. And elevation is
-absent from the whole analysis — BioSIM was run with `elev = NaN` and the CaSR
-extraction carries no terrain — so part of what is called a latitudinal
-gradient here could be topographic.
+north–south nightly correlation is not proof of absence.
+
+A second candidate — that the gradient is really topography, since BioSIM was
+run with `elev = NaN` and the CaSR extraction carries no terrain — is tested
+in @sec-elev below and ruled out.
 
 The cheapest next test follows directly: if flight really is regionally
 synchronous, a model driven by one regional mean temperature series should
 predict the catches about as well as the site-specific runs do. That is one
 re-run of the existing pipeline on an averaged weather series, and it would
 put a number on how much site-specific weather is buying us.
+
+## Is the gradient an elevation error? {#sec-elev}
+
+```{r}
+#| label: elev-data
+elev_check <- readRDS(file.path("data", "processed", "elevation_check.rds"))
+elev_sum   <- elev_check$summary
+```
+
+Elevation is the obvious suspect for a gradient that is too steep. `R/03`
+leaves it unspecified, so BioSIM takes it from its own digital elevation
+model, and elevation is itself a latitude proxy in this network: the southern
+localities are coastal lowlands and the northern ones sit above 300 m
+(median `r sprintf("%.0f", elev_sum$elev_south)` m against
+`r sprintf("%.0f", elev_sum$elev_north)` m, r =
+`r sprintf("%.2f", elev_sum$elev_lat_r)` with latitude).
+`R/08_elevation_check.R` fetches an elevation for every locality from the USGS
+3DEP point-query service — `r sprintf("%.0f to %.0f", elev_sum$elev_range[1], elev_sum$elev_range[2])`
+m, median `r sprintf("%.0f", elev_sum$elev_median)` — and asks BioSIM the same
+question twice, once with its own elevation model and once with the measured
+value.
+
+Elevation does move the model. Over the plausible range of 100 to 500 m the
+flight date shifts by
+`r paste(sprintf("%+.1f d per 100 m at %s", elev_sum$sens_per_100m$d, sub(",.*", "", elev_sum$sens_per_100m$Location)), collapse = " and ")`,
+against a run-to-run noise of about a tenth of a day. The two signs are not a
+typo: at the coastal locality a *higher* assumed elevation brings flight
+*earlier*, which cannot be a lapse rate and suggests that elevation also
+enters BioSIM's choice and weighting of source weather stations — coastal
+stations at low elevation have cool summers. The mechanism is not established
+here; what matters is that the model is demonstrably sensitive.
+
+```{r}
+#| label: tbl-elev-test
+#| tbl-cap: "Modelled flight with BioSIM's own elevation model against modelled flight with the measured elevation, over a sample of locality-years spanning the latitude range"
+tibble::tibble(
+  Quantity = c("Locality-years compared",
+               "Mean shift when the measured elevation is supplied",
+               "Mean shift, southern localities",
+               "Mean shift, northern localities",
+               "Mean absolute offset against the catches",
+               "Latitude gradient of modelled flight",
+               "Latitude gradient of the observed catches"),
+  Value = c(
+    sprintf("%d", elev_sum$n_preview),
+    sprintf("%+.1f d", elev_sum$mean_shift),
+    sprintf("%+.1f d", elev_sum$shift_south),
+    sprintf("%+.1f d", elev_sum$shift_north),
+    sprintf("%.1f d \u2192 %.1f d", elev_sum$abs_off_dem, elev_sum$abs_off_usgs),
+    sprintf("%+.2f \u2192 %+.2f d per \u00b0N", elev_sum$grad_dem, elev_sum$grad_usgs),
+    sprintf("%+.2f d per \u00b0N", elev_sum$grad_obs)
+  )
+) |>
+  kable(align = c("l", "r"))
+```
+
+BioSIM's elevation model is already right at these localities. Supplying the
+measured value moves the flight date by a few tenths of a day — of the same
+order as the replicate-to-replicate variation of the service itself — leaves
+the mean offset against the catches where it was, and does not touch the
+gradient, which stays near six days per degree against an observed tenth of a
+day. A full re-run with elevation, one switch in `R/03`, would not change any
+conclusion in this log, so it has not been made.
+
+## How precisely does the location have to be right?
+
+The elevation work turned up something that does matter. A modelled date at a
+coastal locality is not a smooth function of where the point is: displacing
+the same trap eastwards in steps, with BioSIM's own elevation model each time,
+moves the answer by three days inside the first kilometre and then wanders
+back.
+
+```{r}
+#| label: tbl-elev-coords
+#| tbl-cap: "The coastal locality of the scan, displaced eastwards in steps of longitude"
+elev_check$coords |>
+  transmute(`displacement, km` = round(km, 2),
+            `flight p50` = round(p50, 1),
+            `shift, d` = sprintf("%+.1f", shift)) |>
+  kable(align = c("r", "r", "r"))
+```
+
+That is not a lapse rate or a distance effect; it is what a discrete set of
+source weather stations looks like when a point crosses from one
+interpolation neighbourhood into another. Two consequences. A modelled date
+cannot be attributed to a trap more finely than a few days at a coastal site,
+which matters because the recorded coordinates in this dataset carry a stated
+uncertainty of one to eight kilometres — though that uncertainty does not
+predict the size of the offset (@sec-compare), so this behaves as noise rather
+than as a bias. And a locality must always be queried at its recorded
+coordinates: an earlier version of this work used a coordinate rounded to two
+decimals from memory, landed 1.5 km away, and read that as evidence that
+BioSIM's elevation model was wrong at the coast. It was not.
+
