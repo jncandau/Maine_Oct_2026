@@ -1923,11 +1923,15 @@ catch date, a bias of `r sprintf("%+.1f", cnt_best$bias)` days, and
 days — all out of sample, and with no information from the year being
 predicted.
 
-**BioSIM's raw site curve is worse than climatology.** Used as delivered it
-loses to a seasonal average fitted from other years, on both the likelihood
-and the median. Giving it a free exponent helps, a shape correction does not,
-and replacing the site curve with the single regional one helps most. Latitude
-makes things worse again, for the fourth time in this log.
+**BioSIM's raw site curve does no better than climatology.** Used as
+delivered it ties a seasonal average fitted from other years on mean absolute
+error (4.47 d against 4.48 d) and is worse on the two metrics that penalise
+large misses and mis-placed nightly mass: RMSE 5.82 d against 5.30 d, and a
+mean log predicted share of −3.38 against −3.35. Its bias is the largest of
+any specification at −2.19 d. Giving the curve a free exponent helps, a shape
+correction does not, and replacing the site curve with the single regional one
+helps most. Latitude makes things worse again, for the fourth time in this
+log.
 
 **The pupation distribution does not do better than the flight curve.**
 Applied locality by locality it lands where BioSIM's site curve does
