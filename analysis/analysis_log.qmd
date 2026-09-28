@@ -1975,8 +1975,12 @@ to BioSIM's curve as delivered, with a spread of
 widens the predicted central 90% from
 `r sprintf("%.1f", cnt_sum$raw_width)` to `r sprintf("%.1f", cnt_sum$cal_width)`
 days. The observed central 90% is `r sprintf("%.1f", cnt_sum$obs_width)` days,
-so the calibrated prediction is well centred but too broad: it is a good
-predictor of the median date and an over-dispersed one of the season's spread.
+so the calibrated prediction is well centred and too broad. Part of that gap
+is not model error: the observed width is one realisation of a very
+overdispersed count and a spiky realisation is narrower than the mean curve
+behind it. @sec-forecast measures it properly by simulating realisations, and
+the over-width survives at about two and a half days rather than the five
+this comparison suggests.
 
 ```{r}
 #| label: fig-count-skill
@@ -2263,6 +2267,152 @@ were therefore repeated with `lme4` — the Poisson-lognormal as an
 observation-level random effect, the negative binomial through `glmer.nb` —
 which reproduced the log-likelihoods to within 3 AIC and the nightly standard
 deviation to three decimals, so the ranking does not rest on that warning.
+
+
+# Forecasting from what a forecast has {#sec-forecast}
+
+```{r}
+#| label: forecast-data
+timing <- readRDS(file.path("data", "processed", "flight_timing.rds"))
+tim_scores <- timing$scores
+tim_width  <- timing$width_summary
+tim_cv     <- timing$cv
+tim_sum    <- timing$summary
+
+## Inline `r` cannot carry escaped backticks, so column lookups go through
+## these helpers instead of backtick-quoted names.
+tim_get <- function(sp, col) tim_scores[[col]][tim_scores$spec == sp]
+tim_w   <- function(sp, col) tim_width[[col]][tim_width$spec == sp]
+```
+
+The sections above ask what the models get right. This one fixes the inputs a
+forecast would actually have for a locality-year and asks how well the flight
+season can be predicted from them:
+
+1. a distribution of developmental dates — **pupation** from bayessbw, or
+   **adult emergence** from BioSIM;
+2. **hourly temperature** at the locality;
+3. the season's **total catch**.
+
+No trap data from the year being predicted. The season total being an input is
+what makes this tractable: abundance is not modelled, only the share of that
+total falling on each night.
+
+## The distribution of adult dates
+
+BioSIM's `Adults` column, kept in @sec-biosim, is a stock — it re-counts the
+same individuals every day and sums to about 1,500% of the cohort, so it is
+not a distribution. The series that is one is **`MaleEmergence +
+FemaleEmergence`**, which sums to exactly 100%. At the regional point in 1978
+it is centred on day 190.4 with a central 90% of 13.2 days, against 194.7 and
+14.4 days for the flight curve: emergence is four days earlier and slightly
+narrower, as it should be. This section is the first use of it.
+
+## Nightly temperature
+
+Flight is crepuscular, so temperature is averaged over the hours 20:00 to
+02:00 of each trap-night, with the hours after midnight assigned to the night
+that began the previous evening. Every one of the
+`r format(tim_sum$n_nights, big.mark = ",")` trapped nights has a complete
+window.
+
+## Timing and nightly skill
+
+```{r}
+#| label: tbl-forecast
+#| tbl-cap: "Leave-one-year-out skill from forecast inputs only. `+ temp` adds the nightly flight-hour temperature as a quadratic. All specifications are negative binomial with a locality-year level, so the season total is conditioned on rather than predicted"
+tim_scores |>
+  transmute(Specification = spec,
+            `median error, d` = round(`median error, d`, 2),
+            `RMSE, d` = round(`RMSE median, d`, 2),
+            `log score per moth` = round(`log score per moth`, 3),
+            `90% coverage` = sprintf("%.0f%%", 100 * `90% coverage`)) |>
+  kable(align = c("l", "r", "r", "r", "r"))
+```
+
+**For the median date, the two BioSIM series are interchangeable and better
+than bayessbw.** The flight curve gives
+`r sprintf("%.2f", tim_get("flight (R/10 best)", "median error, d"))`
+days of mean absolute error and emergence
+`r sprintf("%.2f", tim_get("emergence", "median error, d"))`
+— a difference of a sixth of a day, so **either BioSIM input can be used**.
+Pupation from bayessbw costs about a day
+(`r sprintf("%.2f", tim_get("pupation", "median error, d"))` d),
+and a seasonal spline with temperature but no development model at all is no
+better (`r sprintf("%.2f", tim_get("temperature only", "median error, d"))` d).
+
+**Nightly temperature does not help the median, but it is the first thing that
+has improved the nightly numbers.** Adding it moves the median error the wrong
+way by a tenth of a day, while the log score per moth improves from
+`r sprintf("%.3f", tim_get("flight (R/10 best)", "log score per moth"))`
+to `r sprintf("%.3f", tim_get("flight + temp", "log score per moth"))`
+with the flight curve and from
+`r sprintf("%.3f", tim_get("emergence", "log score per moth"))`
+to `r sprintf("%.3f", tim_get("emergence + temp", "log score per moth"))`
+with emergence. Temperature decides **which nights inside the season** the
+moths fly, not where the season sits — which is what the phenology is for.
+
+## The predicted season is genuinely too wide
+
+Earlier sections compared the predicted mean curve's central 90% with the
+observed one and called the prediction over-dispersed. That comparison is not
+quite fair: the observed width is measured on a single realisation of a very
+overdispersed count, and a spiky realisation is narrower than the smooth mean
+curve behind it. The check below simulates realisations from each fitted
+predictive distribution and measures their widths exactly as the observed
+width is measured.
+
+```{r}
+#| label: tbl-forecast-width
+#| tbl-cap: "Central 90% of the flight season: the smooth mean curve, a simulated realisation of it (100 draws per locality-year), and the observed value. The last column is the share of locality-years whose observed width falls inside the simulated 90% band"
+tim_width |>
+  transmute(Specification = spec,
+            `mean curve, d` = round(`mean-curve width, d`, 1),
+            `realisation, d` = round(`simulated width, d`, 1),
+            `observed, d` = round(`observed width, d`, 1),
+            `inside the band` = sprintf("%.0f%%", 100 * `inside the 90% band`)) |>
+  kable(align = c("l", "r", "r", "r", "r"))
+```
+
+Sampling noise accounts for about a day of the gap — the mean curve of the
+best specification spans
+`r sprintf("%.1f", tim_w("flight + temp", "mean-curve width, d"))`
+days and its realisations
+`r sprintf("%.1f", tim_w("flight + temp", "simulated width, d"))`
+— but the observed `r sprintf("%.1f", tim_sum$obs_width)` days is still about
+two and a half days narrower than that, and only
+`r sprintf("%.0f%%", 100 * tim_w("flight + temp", "inside the 90% band"))`
+of locality-years fall inside the simulated band where 90% should. So the
+over-width is real, and smaller than the figure quoted in @sec-count: the
+honest statement is a realisation of
+`r sprintf("%.1f", tim_w("flight + temp", "simulated width, d"))`
+days against `r sprintf("%.1f", tim_sum$obs_width)` observed, not the mean
+curve's `r sprintf("%.1f", tim_w("flight + temp", "mean-curve width, d"))`.
+
+The nightly predictive intervals are correspondingly conservative: the 90%
+negative binomial interval, with the season total supplied, contains the
+observed count on
+`r sprintf("%.0f%%", 100 * tim_get("flight + temp", "90% coverage"))`
+of nights.
+
+## Where this leaves the forecast
+
+| Component | Best available | Skill |
+|-----------|----------------|-------|
+| Median flight date | BioSIM flight or emergence curve, calibrated | `r sprintf("%.1f", tim_scores[["median error, d"]][1])` d mean absolute error, out of sample |
+| Which nights within the season | the same, plus nightly flight-hour temperature | log score per moth `r sprintf("%.3f", min(tim_scores[["log score per moth"]]))` |
+| Count on a given night | negative binomial, θ from @sec-dist, mean = share × season total | 90% interval covers `r sprintf("%.0f%%", 100 * tim_get("flight + temp", "90% coverage"))` of nights |
+| Season width | all specifications too broad by about 2.5 d | `r sprintf("%.0f%%", 100 * tim_width[["inside the 90% band"]][1])` of observed widths inside the simulated band |
+
+: The forecast as it stands {#tbl-forecast-summary}
+
+The one clear deficiency is the width. Every driver produces a season two to
+five days too broad, and the ranking of drivers by width follows their ranking
+by timing, which suggests a common cause: the shape correction is fitted
+across all locality-years and cannot know that a particular season will be
+compressed. A scale parameter on the fitted shape — sharpening the predicted
+curve by a factor estimated out of sample — is the obvious next step and has
+not been tried.
 
 
 # Findings so far {#sec-summary}

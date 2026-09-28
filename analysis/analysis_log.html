@@ -2243,14 +2243,22 @@ vertical-align: -.125em;
   <ul class="collapse">
   <li><a href="#the-answer-and-what-it-is-for" id="toc-the-answer-and-what-it-is-for" class="nav-link" data-scroll-target="#the-answer-and-what-it-is-for"><span class="header-section-number">9.1</span> The answer, and what it is for</a></li>
   </ul></li>
-  <li><a href="#sec-summary" id="toc-sec-summary" class="nav-link" data-scroll-target="#sec-summary"><span class="header-section-number">10</span> Findings so far</a>
+  <li><a href="#sec-forecast" id="toc-sec-forecast" class="nav-link" data-scroll-target="#sec-forecast"><span class="header-section-number">10</span> Forecasting from what a forecast has</a>
   <ul class="collapse">
-  <li><a href="#the-data" id="toc-the-data" class="nav-link" data-scroll-target="#the-data"><span class="header-section-number">10.1</span> The data</a></li>
-  <li><a href="#two-development-models-that-agree-with-each-other" id="toc-two-development-models-that-agree-with-each-other" class="nav-link" data-scroll-target="#two-development-models-that-agree-with-each-other"><span class="header-section-number">10.2</span> Two development models that agree with each other</a></li>
-  <li><a href="#the-central-finding" id="toc-the-central-finding" class="nav-link" data-scroll-target="#the-central-finding"><span class="header-section-number">10.3</span> The central finding</a></li>
-  <li><a href="#five-explanations-tested-and-set-aside" id="toc-five-explanations-tested-and-set-aside" class="nav-link" data-scroll-target="#five-explanations-tested-and-set-aside"><span class="header-section-number">10.4</span> Five explanations tested and set aside</a></li>
-  <li><a href="#what-predicts-the-flight-season" id="toc-what-predicts-the-flight-season" class="nav-link" data-scroll-target="#what-predicts-the-flight-season"><span class="header-section-number">10.5</span> What predicts the flight season</a></li>
-  <li><a href="#what-is-still-open" id="toc-what-is-still-open" class="nav-link" data-scroll-target="#what-is-still-open"><span class="header-section-number">10.6</span> What is still open</a></li>
+  <li><a href="#the-distribution-of-adult-dates" id="toc-the-distribution-of-adult-dates" class="nav-link" data-scroll-target="#the-distribution-of-adult-dates"><span class="header-section-number">10.1</span> The distribution of adult dates</a></li>
+  <li><a href="#nightly-temperature" id="toc-nightly-temperature" class="nav-link" data-scroll-target="#nightly-temperature"><span class="header-section-number">10.2</span> Nightly temperature</a></li>
+  <li><a href="#timing-and-nightly-skill" id="toc-timing-and-nightly-skill" class="nav-link" data-scroll-target="#timing-and-nightly-skill"><span class="header-section-number">10.3</span> Timing and nightly skill</a></li>
+  <li><a href="#the-predicted-season-is-genuinely-too-wide" id="toc-the-predicted-season-is-genuinely-too-wide" class="nav-link" data-scroll-target="#the-predicted-season-is-genuinely-too-wide"><span class="header-section-number">10.4</span> The predicted season is genuinely too wide</a></li>
+  <li><a href="#where-this-leaves-the-forecast" id="toc-where-this-leaves-the-forecast" class="nav-link" data-scroll-target="#where-this-leaves-the-forecast"><span class="header-section-number">10.5</span> Where this leaves the forecast</a></li>
+  </ul></li>
+  <li><a href="#sec-summary" id="toc-sec-summary" class="nav-link" data-scroll-target="#sec-summary"><span class="header-section-number">11</span> Findings so far</a>
+  <ul class="collapse">
+  <li><a href="#the-data" id="toc-the-data" class="nav-link" data-scroll-target="#the-data"><span class="header-section-number">11.1</span> The data</a></li>
+  <li><a href="#two-development-models-that-agree-with-each-other" id="toc-two-development-models-that-agree-with-each-other" class="nav-link" data-scroll-target="#two-development-models-that-agree-with-each-other"><span class="header-section-number">11.2</span> Two development models that agree with each other</a></li>
+  <li><a href="#the-central-finding" id="toc-the-central-finding" class="nav-link" data-scroll-target="#the-central-finding"><span class="header-section-number">11.3</span> The central finding</a></li>
+  <li><a href="#five-explanations-tested-and-set-aside" id="toc-five-explanations-tested-and-set-aside" class="nav-link" data-scroll-target="#five-explanations-tested-and-set-aside"><span class="header-section-number">11.4</span> Five explanations tested and set aside</a></li>
+  <li><a href="#what-predicts-the-flight-season" id="toc-what-predicts-the-flight-season" class="nav-link" data-scroll-target="#what-predicts-the-flight-season"><span class="header-section-number">11.5</span> What predicts the flight season</a></li>
+  <li><a href="#what-is-still-open" id="toc-what-is-still-open" class="nav-link" data-scroll-target="#what-is-still-open"><span class="header-section-number">11.6</span> What is still open</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -6035,7 +6043,7 @@ Table 50: Leave-one-year-out skill. Log-likelihood is the multinomial log-likel
 <p><strong>BioSIM’s raw site curve does no better than climatology.</strong> Used as delivered it ties a seasonal average fitted from other years on mean absolute error (4.47 d against 4.48 d) and is worse on the two metrics that penalise large misses and mis-placed nightly mass: RMSE 5.82 d against 5.30 d, and a mean log predicted share of −3.38 against −3.35. Its bias is the largest of any specification at −2.19 d. Giving the curve a free exponent helps, a shape correction does not, and replacing the site curve with the single regional one helps most. Latitude makes things worse again, for the fourth time in this log.</p>
 <p><strong>The pupation distribution does not do better than the flight curve.</strong> Applied locality by locality it lands where BioSIM’s site curve does (4.01 days against 3.99), and the regional bayessbw run is the weaker of the two (4.19 days) — the opposite of BioSIM, where going regional helped most. Both bayessbw specifications are almost unbiased, which is the spline absorbing the pupation-to-catch interval as intended, but they are less sharp: a mean log predicted share of -3.21 and -3.35 against -2.94 for the best. Two independent development models place pupation within a day of each other, so this is not a disagreement about the date; it is that bayessbw’s year-to-year placement carries less of the signal the catches follow, consistent with its weaker year-mean correlation in <a href="#tbl-compare-structure" class="quarto-xref">Table 29</a>.</p>
 <p><strong>Almost all of the shape is empirical.</strong> The fitted exponent on the regional curve is 0.24, so the modelled curve enters the prediction heavily damped. <code>reg-med</code> settles how much it is worth by removing it altogether and keeping only the spline in days from its median: that costs nothing on timing (3.00 days of mean absolute error against 3.02, the same 82% inside five days) and a little on the nightly likelihood (-3.00 against -2.94 per moth). So what the development model contributes is <em>when</em> the season is centred — which year runs early, which runs late — and the curve’s own form adds only a marginal sharpening of the nightly fit.</p>
-<p>Measured on the trapped nights, where the fit is supported, the correction moves the predicted median +1.9 days relative to BioSIM’s curve as delivered, with a spread of 4.9 days across locality-years, and it widens the predicted central 90% from 12.6 to 15.8 days. The observed central 90% is 11.0 days, so the calibrated prediction is well centred but too broad: it is a good predictor of the median date and an over-dispersed one of the season’s spread.</p>
+<p>Measured on the trapped nights, where the fit is supported, the correction moves the predicted median +1.9 days relative to BioSIM’s curve as delivered, with a spread of 4.9 days across locality-years, and it widens the predicted central 90% from 12.6 to 15.8 days. The observed central 90% is 11.0 days, so the calibrated prediction is well centred and too broad. Part of that gap is not model error: the observed width is one realisation of a very overdispersed count and a spiky realisation is narrower than the mean curve behind it. <a href="#sec-forecast" class="quarto-xref">Section 10</a> measures it properly by simulating realisations, and the over-width survives at about two and a half days rather than the five this comparison suggests.</p>
 <div class="cell">
 <div class="cell-output-display">
 <div id="fig-count-skill" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -6208,27 +6216,269 @@ Figure 5: Left: variance against expected catch for nights binned into twenty g
 <p>One caveat on the fitting. <code>glmmTMB</code> warns that it was built against a different version of <code>TMB</code> than the one installed here. The two leading fits were therefore repeated with <code>lme4</code> — the Poisson-lognormal as an observation-level random effect, the negative binomial through <code>glmer.nb</code> — which reproduced the log-likelihoods to within 3 AIC and the nightly standard deviation to three decimals, so the ranking does not rest on that warning.</p>
 </section>
 </section>
-<section id="sec-summary" class="level1" data-number="10">
-<h1 data-number="10"><span class="header-section-number">10</span> Findings so far</h1>
-<section id="the-data" class="level2" data-number="10.1">
-<h2 data-number="10.1" class="anchored" data-anchor-id="the-data"><span class="header-section-number">10.1</span> The data</h2>
+<section id="sec-forecast" class="level1" data-number="10">
+<h1 data-number="10"><span class="header-section-number">10</span> Forecasting from what a forecast has</h1>
+<p>The sections above ask what the models get right. This one fixes the inputs a forecast would actually have for a locality-year and asks how well the flight season can be predicted from them:</p>
+<ol type="1">
+<li>a distribution of developmental dates — <strong>pupation</strong> from bayessbw, or <strong>adult emergence</strong> from BioSIM;</li>
+<li><strong>hourly temperature</strong> at the locality;</li>
+<li>the season’s <strong>total catch</strong>.</li>
+</ol>
+<p>No trap data from the year being predicted. The season total being an input is what makes this tractable: abundance is not modelled, only the share of that total falling on each night.</p>
+<section id="the-distribution-of-adult-dates" class="level2" data-number="10.1">
+<h2 data-number="10.1" class="anchored" data-anchor-id="the-distribution-of-adult-dates"><span class="header-section-number">10.1</span> The distribution of adult dates</h2>
+<p>BioSIM’s <code>Adults</code> column, kept in <a href="#sec-biosim" class="quarto-xref">Section 4</a>, is a stock — it re-counts the same individuals every day and sums to about 1,500% of the cohort, so it is not a distribution. The series that is one is <strong><code>MaleEmergence + FemaleEmergence</code></strong>, which sums to exactly 100%. At the regional point in 1978 it is centred on day 190.4 with a central 90% of 13.2 days, against 194.7 and 14.4 days for the flight curve: emergence is four days earlier and slightly narrower, as it should be. This section is the first use of it.</p>
+</section>
+<section id="nightly-temperature" class="level2" data-number="10.2">
+<h2 data-number="10.2" class="anchored" data-anchor-id="nightly-temperature"><span class="header-section-number">10.2</span> Nightly temperature</h2>
+<p>Flight is crepuscular, so temperature is averaged over the hours 20:00 to 02:00 of each trap-night, with the hours after midnight assigned to the night that began the previous evening. Every one of the 4,319 trapped nights has a complete window.</p>
+</section>
+<section id="timing-and-nightly-skill" class="level2" data-number="10.3">
+<h2 data-number="10.3" class="anchored" data-anchor-id="timing-and-nightly-skill"><span class="header-section-number">10.3</span> Timing and nightly skill</h2>
+<div class="cell">
+<div id="tbl-forecast" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-forecast-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 53: Leave-one-year-out skill from forecast inputs only. <code>+ temp</code> adds the nightly flight-hour temperature as a quadratic. All specifications are negative binomial with a locality-year level, so the season total is conditioned on rather than predicted
+</figcaption>
+<div aria-describedby="tbl-forecast-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 21%">
+<col style="width: 10%">
+<col style="width: 25%">
+<col style="width: 17%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Specification</th>
+<th style="text-align: right;">median error, d</th>
+<th style="text-align: right;">RMSE, d</th>
+<th style="text-align: right;">log score per moth</th>
+<th style="text-align: right;">90% coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">flight (R/10 best)</td>
+<td style="text-align: right;">3.04</td>
+<td style="text-align: right;">4.09</td>
+<td style="text-align: right;">-2.907</td>
+<td style="text-align: right;">93%</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">flight + temp</td>
+<td style="text-align: right;">3.14</td>
+<td style="text-align: right;">4.21</td>
+<td style="text-align: right;">-2.833</td>
+<td style="text-align: right;">93%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">emergence + temp</td>
+<td style="text-align: right;">3.17</td>
+<td style="text-align: right;">4.19</td>
+<td style="text-align: right;">-2.881</td>
+<td style="text-align: right;">93%</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">emergence</td>
+<td style="text-align: right;">3.19</td>
+<td style="text-align: right;">4.12</td>
+<td style="text-align: right;">-3.011</td>
+<td style="text-align: right;">93%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">pupation + temp</td>
+<td style="text-align: right;">3.82</td>
+<td style="text-align: right;">5.08</td>
+<td style="text-align: right;">-2.957</td>
+<td style="text-align: right;">93%</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">pupation</td>
+<td style="text-align: right;">4.17</td>
+<td style="text-align: right;">5.28</td>
+<td style="text-align: right;">-3.155</td>
+<td style="text-align: right;">94%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">temperature only</td>
+<td style="text-align: right;">4.19</td>
+<td style="text-align: right;">5.14</td>
+<td style="text-align: right;">-3.143</td>
+<td style="text-align: right;">93%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p><strong>For the median date, the two BioSIM series are interchangeable and better than bayessbw.</strong> The flight curve gives 3.04 days of mean absolute error and emergence 3.19 — a difference of a sixth of a day, so <strong>either BioSIM input can be used</strong>. Pupation from bayessbw costs about a day (4.17 d), and a seasonal spline with temperature but no development model at all is no better (4.19 d).</p>
+<p><strong>Nightly temperature does not help the median, but it is the first thing that has improved the nightly numbers.</strong> Adding it moves the median error the wrong way by a tenth of a day, while the log score per moth improves from -2.907 to -2.833 with the flight curve and from -3.011 to -2.881 with emergence. Temperature decides <strong>which nights inside the season</strong> the moths fly, not where the season sits — which is what the phenology is for.</p>
+</section>
+<section id="the-predicted-season-is-genuinely-too-wide" class="level2" data-number="10.4">
+<h2 data-number="10.4" class="anchored" data-anchor-id="the-predicted-season-is-genuinely-too-wide"><span class="header-section-number">10.4</span> The predicted season is genuinely too wide</h2>
+<p>Earlier sections compared the predicted mean curve’s central 90% with the observed one and called the prediction over-dispersed. That comparison is not quite fair: the observed width is measured on a single realisation of a very overdispersed count, and a spiky realisation is narrower than the smooth mean curve behind it. The check below simulates realisations from each fitted predictive distribution and measures their widths exactly as the observed width is measured.</p>
+<div class="cell">
+<div id="tbl-forecast-width" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-forecast-width-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 54: Central 90% of the flight season: the smooth mean curve, a simulated realisation of it (100 draws per locality-year), and the observed value. The last column is the share of locality-years whose observed width falls inside the simulated 90% band
+</figcaption>
+<div aria-describedby="tbl-forecast-width-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 18%">
+<col style="width: 19%">
+<col style="width: 15%">
+<col style="width: 21%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Specification</th>
+<th style="text-align: right;">mean curve, d</th>
+<th style="text-align: right;">realisation, d</th>
+<th style="text-align: right;">observed, d</th>
+<th style="text-align: right;">inside the band</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">flight + temp</td>
+<td style="text-align: right;">14.2</td>
+<td style="text-align: right;">13.3</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">72%</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">emergence</td>
+<td style="text-align: right;">15.1</td>
+<td style="text-align: right;">14.0</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">71%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">flight (R/10 best)</td>
+<td style="text-align: right;">14.4</td>
+<td style="text-align: right;">13.5</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">69%</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">emergence + temp</td>
+<td style="text-align: right;">14.9</td>
+<td style="text-align: right;">13.9</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">68%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">pupation + temp</td>
+<td style="text-align: right;">16.4</td>
+<td style="text-align: right;">15.0</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">64%</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">pupation</td>
+<td style="text-align: right;">16.6</td>
+<td style="text-align: right;">15.1</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">62%</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">temperature only</td>
+<td style="text-align: right;">17.7</td>
+<td style="text-align: right;">16.1</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">52%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Sampling noise accounts for about a day of the gap — the mean curve of the best specification spans 14.2 days and its realisations 13.3 — but the observed 11.0 days is still about two and a half days narrower than that, and only 72% of locality-years fall inside the simulated band where 90% should. So the over-width is real, and smaller than the figure quoted in <a href="#sec-count" class="quarto-xref">Section 8</a>: the honest statement is a realisation of 13.3 days against 11.0 observed, not the mean curve’s 14.2.</p>
+<p>The nightly predictive intervals are correspondingly conservative: the 90% negative binomial interval, with the season total supplied, contains the observed count on 93% of nights.</p>
+</section>
+<section id="where-this-leaves-the-forecast" class="level2" data-number="10.5">
+<h2 data-number="10.5" class="anchored" data-anchor-id="where-this-leaves-the-forecast"><span class="header-section-number">10.5</span> Where this leaves the forecast</h2>
+<div id="tbl-forecast-summary" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-forecast-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 55: The forecast as it stands
+</figcaption>
+<div aria-describedby="tbl-forecast-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 32%">
+<col style="width: 47%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Component</th>
+<th>Best available</th>
+<th>Skill</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Median flight date</td>
+<td>BioSIM flight or emergence curve, calibrated</td>
+<td>3.0 d mean absolute error, out of sample</td>
+</tr>
+<tr class="even">
+<td>Which nights within the season</td>
+<td>the same, plus nightly flight-hour temperature</td>
+<td>log score per moth -3.155</td>
+</tr>
+<tr class="odd">
+<td>Count on a given night</td>
+<td>negative binomial, θ from <a href="#sec-dist" class="quarto-xref">Section 9</a>, mean = share × season total</td>
+<td>90% interval covers 93% of nights</td>
+</tr>
+<tr class="even">
+<td>Season width</td>
+<td>all specifications too broad by about 2.5 d</td>
+<td>72% of observed widths inside the simulated band</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The one clear deficiency is the width. Every driver produces a season two to five days too broad, and the ranking of drivers by width follows their ranking by timing, which suggests a common cause: the shape correction is fitted across all locality-years and cannot know that a particular season will be compressed. A scale parameter on the fitted shape — sharpening the predicted curve by a factor estimated out of sample — is the obvious next step and has not been tried.</p>
+</section>
+</section>
+<section id="sec-summary" class="level1" data-number="11">
+<h1 data-number="11"><span class="header-section-number">11</span> Findings so far</h1>
+<section id="the-data" class="level2" data-number="11.1">
+<h2 data-number="11.1" class="anchored" data-anchor-id="the-data"><span class="header-section-number">11.1</span> The data</h2>
 <p>227 Maine light-trap records from the Rhainds compilation cover 49 localities and 22 years (1968–1989), with 5,612 counted trap-nights, every record above 99 moths for the season. The minimum-effort rule of <a href="#sec-traps" class="quarto-xref">Section 2</a> marks 187 records as usable for percentile phenology; intersected with the modelled cohorts that finish flight, <strong>170 locality-years</strong> carry a meaningful model-versus-observed comparison. Hourly CaSR weather was extracted for all 227 locality-years (1.99 million hours).</p>
 </section>
-<section id="two-development-models-that-agree-with-each-other" class="level2" data-number="10.2">
-<h2 data-number="10.2" class="anchored" data-anchor-id="two-development-models-that-agree-with-each-other"><span class="header-section-number">10.2</span> Two development models that agree with each other</h2>
+<section id="two-development-models-that-agree-with-each-other" class="level2" data-number="11.2">
+<h2 data-number="11.2" class="anchored" data-anchor-id="two-development-models-that-agree-with-each-other"><span class="header-section-number">11.2</span> Two development models that agree with each other</h2>
 <p>BioSIM’s <code>Spruce_Budworm_Biology</code> and the Bayesian model of bayessbw were fitted to different data, by different methods, and were driven by different weather — BioSIM’s own station network against the CaSR grid. They place pupation within a day of each other (<a href="#tbl-pupal-vs-biosim" class="quarto-xref">Table 26</a>), and both put the observed median catch about a fortnight after predicted pupation (12.9 d for bayessbw, 12.4 d for BioSIM). In the pupation model, individual variation exceeds parameter uncertainty about fourfold: a population takes 9.3 days to pupate from p05 to p95, while the posterior places its median to within 2.2 days.</p>
 </section>
-<section id="the-central-finding" class="level2" data-number="10.3">
-<h2 data-number="10.3" class="anchored" data-anchor-id="the-central-finding"><span class="header-section-number">10.3</span> The central finding</h2>
+<section id="the-central-finding" class="level2" data-number="11.3">
+<h2 data-number="11.3" class="anchored" data-anchor-id="the-central-finding"><span class="header-section-number">11.3</span> The central finding</h2>
 <p>Against the catches, modelled flight is early by a median 1.8 days at p50 (3.7 d at p05, 0.7 d at p95). That average hides a split: year means correlate at 0.83, but within a year across localities the correlation is 0.14.</p>
 <p>The reason is a <strong>gradient-slope error</strong>. Both models spread flight across Maine about seven times more steeply with latitude than the catches do (<a href="#tbl-sync-gradient" class="quarto-xref">Table 41</a>): +0.49 days per degree observed, against +4.16 (BioSIM) and +3.27 (bayessbw) — 1.7 days of observed spread across the network against 14.8 and 11.7 modelled. Flight in Maine is essentially synchronous, and the apparent “early in the south” offset is the difference between a steep modelled gradient and a flat real one. The two models’ offsets correlate at 0.74, locality-year by locality-year, which is why the same error appears in both.</p>
 </section>
-<section id="five-explanations-tested-and-set-aside" class="level2" data-number="10.4">
-<h2 data-number="10.4" class="anchored" data-anchor-id="five-explanations-tested-and-set-aside"><span class="header-section-number">10.4</span> Five explanations tested and set aside</h2>
+<section id="five-explanations-tested-and-set-aside" class="level2" data-number="11.4">
+<h2 data-number="11.4" class="anchored" data-anchor-id="five-explanations-tested-and-set-aside"><span class="header-section-number">11.4</span> Five explanations tested and set aside</h2>
 <div id="tbl-summary-ruled-out" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-summary-ruled-out-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table 53: What the residual is not
+Table 56: What the residual is not
 </figcaption>
 <div aria-describedby="tbl-summary-ruled-out-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <table class="caption-top table">
@@ -6277,15 +6527,15 @@ Table 53: What the residual is not
 </div>
 <p>Catch size survives as a second, weaker and near-independent site covariate: +1.93 days per tenfold catch against +3.30 days per degree of latitude, and with no effect within a locality.</p>
 </section>
-<section id="what-predicts-the-flight-season" class="level2" data-number="10.5">
-<h2 data-number="10.5" class="anchored" data-anchor-id="what-predicts-the-flight-season"><span class="header-section-number">10.5</span> What predicts the flight season</h2>
+<section id="what-predicts-the-flight-season" class="level2" data-number="11.5">
+<h2 data-number="11.5" class="anchored" data-anchor-id="what-predicts-the-flight-season"><span class="header-section-number">11.5</span> What predicts the flight season</h2>
 <p>Site-specific weather makes both models worse than a single regional series (<a href="#tbl-regional" class="quarto-xref">Table 47</a>). Built into the nightly count model of <a href="#sec-count" class="quarto-xref">Section 8</a>, the calibrated regional curve predicts a held-out year’s median catch date to 3.02 days of mean absolute error, bias -0.31 d, with 82% of locality-years inside five days — against 4.48 days for a seasonal climatology.</p>
 <p>Two qualifications matter for using it. First, the development model contributes <strong>the date, not the shape</strong>: with an exponent of 0.24 on the modelled curve, deleting the curve entirely and keeping only its median plus the empirical correction costs nothing on timing (3.00 days). BioSIM’s uncorrected site curve, meanwhile, buys nothing over climatology — it ties on mean absolute error and is worse on RMSE, on the nightly likelihood and on bias. Second, the calibrated prediction is <strong>over-dispersed</strong>: it widens the predicted central 90% to 15.8 days against 11.0 observed, so an interval read straight off the fitted curve is conservative.</p>
 <p>The distribution around that prediction is also settled (<a href="#sec-dist" class="quarto-xref">Section 9</a>): a night’s catch is <strong>negative binomial</strong> with a variance about 3.4 times the squared mean, it needs no zero inflation, and the implied night-to-night multiplier varies by an order of magnitude in each direction — more than anything the development models disagree about.</p>
 <p>bayessbw’s pupation distribution does not improve on this (4.01 d site-specific, 4.19 d regional). Its value in this project is as the independent check on pupation timing, not as the driver of the prediction.</p>
 </section>
-<section id="what-is-still-open" class="level2" data-number="10.6">
-<h2 data-number="10.6" class="anchored" data-anchor-id="what-is-still-open"><span class="header-section-number">10.6</span> What is still open</h2>
+<section id="what-is-still-open" class="level2" data-number="11.6">
+<h2 data-number="11.6" class="anchored" data-anchor-id="what-is-still-open"><span class="header-section-number">11.6</span> What is still open</h2>
 <ul>
 <li><strong>Nightly weather is absent from every model here.</strong> It is the only remaining route to separate “the moths were not flying” from “the trap did not catch them”, and the temperature, wind and precipitation series are already extracted per locality-night; they would enter the count model of <a href="#sec-count" class="quarto-xref">Section 8</a> as covariates without changing anything else about it.</li>
 <li><strong>Immigration is not excluded, only unsupported at the nightly scale.</strong> Arrivals need not be simultaneous across localities, and no systematic search for second modes has been made across the 170 curves. Millinocket in 1980 (<a href="#fig-catch-shape" class="quarto-xref">Figure 2</a>) is the one panel that looks like an influx.</li>
