@@ -28,6 +28,10 @@
 #     pup+    the same calibration applied to bayessbw's predicted PUPATION
 #             distribution instead of BioSIM's flight curve, site by site
 #     pupreg+ and to one regional bayessbw run per year
+#     reg-med the regional curve stripped out entirely: only the spline in
+#             days from its median survives, so the development model
+#             contributes a date and nothing else. The gap between this and
+#             `reg+` is what the modelled curve's SHAPE is worth.
 #
 #   The two bayessbw specifications need no lag constant: the correction is a
 #   spline in days from the driving curve's own median, so the interval
@@ -225,6 +229,14 @@ curve_p50 <- function(doy, value) {
                 xout = 0.5, ties = "ordered")$y
 }
 
+curve_pct1 <- function(doy, value, prob) {
+  keep <- value > 0
+  if (!any(keep)) return(NA_real_)
+  cum <- cumsum(value[keep]) / sum(value[keep])
+  stats::approx(c(0, cum), c(min(doy[keep]) - 1, doy[keep]),
+                xout = prob, ties = "ordered")$y
+}
+
 p50_site <- biosim_daily %>%
   group_by(Location, Year) %>%
   summarise(p50_site = curve_p50(doy, flight_site), .groups = "drop")
@@ -281,7 +293,8 @@ covariates <- list(
                     lat = nights$lat_c,
                     basis_creg * nights$lat_c),
   `pup+`    = cbind(log_pup    = nights$log_pup,    basis_cpup),
-  `pupreg+` = cbind(log_pupreg = nights$log_pupreg, basis_cpre)
+  `pupreg+` = cbind(log_pupreg = nights$log_pupreg, basis_cpre),
+  `reg-med` = basis_creg
 )
 
 ## Predicted shares within each locality-year, from the covariate part only.
@@ -319,6 +332,10 @@ score_rows <- function(p, idx) {
       loglik   = sum(moths * log(pmax(p_hat, 1e-12))) / n(),
       obs_p50  = curve_p50(doy, moths),
       pred_p50 = curve_p50(doy, p_hat),
+      obs_p05  = curve_pct1(doy, moths, 0.05),
+      obs_p95  = curve_pct1(doy, moths, 0.95),
+      pred_p05 = curve_pct1(doy, p_hat, 0.05),
+      pred_p95 = curve_pct1(doy, p_hat, 0.95),
       .groups  = "drop"
     ) %>%
     mutate(err_p50 = pred_p50 - obs_p50)
@@ -362,6 +379,23 @@ correction <- tibble::tibble(delta = seq(min(nights$delta_reg),
   mutate(log_adjust = as.vector(
     predict(basis_creg, newx = delta) %*% b_full[-1]))
 
+## How much does the correction move and reshape the modelled curve? The
+## comparison is made on the nights actually trapped, where the fit is
+## supported: `raw` is BioSIM's curve as delivered and `reg+` the calibrated
+## regional prediction, each reduced to the percentiles of the shares it puts
+## on those nights. Evaluating the fitted curve on a wider day grid would only
+## show the correction spline extrapolating past the data.
+
+reshape <- cv %>%
+  filter(model %in% c("raw", "reg+")) %>%
+  select(site_year, Year, model, pred_p05, pred_p50, pred_p95) %>%
+  tidyr::pivot_wider(names_from = model,
+                     values_from = c(pred_p05, pred_p50, pred_p95)) %>%
+  mutate(shift     = .data[["pred_p50_reg+"]] - pred_p50_raw,
+         raw_width = pred_p95_raw - pred_p05_raw,
+         cal_width = .data[["pred_p95_reg+"]] - .data[["pred_p05_reg+"]],
+         widening  = cal_width - raw_width)
+
 
 ## ---- 8. Write and report ----------------------------------------------------
 
@@ -373,18 +407,28 @@ summary_list <- list(
   centroid   = centroid,
   scores     = scores,
   exponent   = unname(b_full[1]),
+  shift      = mean(reshape$shift, na.rm = TRUE),
+  shift_sd   = stats::sd(reshape$shift, na.rm = TRUE),
+  raw_width  = mean(reshape$raw_width, na.rm = TRUE),
+  cal_width  = mean(reshape$cal_width, na.rm = TRUE),
+  obs_width  = mean(cv$obs_p95[cv$model == 'reg+'] -
+                    cv$obs_p05[cv$model == 'reg+'], na.rm = TRUE),
   best       = as.character(scores$model[which.min(scores$`RMSE p50`)])
 )
 
 dir.create(file.path("data", "processed"), showWarnings = FALSE, recursive = TRUE)
 saveRDS(list(nights = nights, cv = cv, scores = scores,
-             correction = correction, summary = summary_list),
+             correction = correction, reshape = reshape,
+             summary = summary_list),
         out_file)
 
 message(sprintf(
   paste0("Nightly count model: %d trapped nights, %d locality-years, %d years",
          " (%.0f%% of nights caught nothing).\n%s\n",
          "  best on median timing: %s | fitted exponent on the regional curve %.2f\n",
+         "  on the trapped nights the correction moves the predicted median %+.1f d\n",
+         "    (sd %.1f) and changes the predicted central 90%% from %.1f to %.1f d,\n",
+         "    against %.1f d observed\n",
          "  written to %s"),
   nrow(nights), summary_list$n_ly, length(years), 100 * summary_list$zero_share,
   paste(sprintf("    %-8s log-lik/night %8.2f | mean |p50 err| %5.2f d | RMSE %5.2f d | bias %+5.2f d",
@@ -392,5 +436,8 @@ message(sprintf(
                 scores$`mean |p50 error|`, scores$`RMSE p50`,
                 scores$`mean p50 bias`),
         collapse = "\n"),
-  summary_list$best, summary_list$exponent, out_file
+  summary_list$best, summary_list$exponent,
+  summary_list$shift, summary_list$shift_sd,
+  summary_list$raw_width, summary_list$cal_width, summary_list$obs_width,
+  out_file
 ))

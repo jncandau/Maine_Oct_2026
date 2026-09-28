@@ -1887,8 +1887,9 @@ scores them leave-one-year-out.
 | `reg+lat` | plus a latitude interaction |
 | `pup+` | the same calibration applied to bayessbw's predicted pupation distribution instead of BioSIM's flight curve, locality by locality |
 | `pupreg+` | and to one regional bayessbw run per year |
+| `reg-med` | the regional curve stripped out entirely, leaving only the spline in days from its median: the development model contributes a date and nothing else |
 
-: The eight specifications {#tbl-count-models}
+: The nine specifications {#tbl-count-models}
 
 The two bayessbw rows need no lag constant. The correction is a spline in days
 from the driving curve's own median, so the interval between pupation and the
@@ -1913,6 +1914,7 @@ cnt_cv |>
 ```
 
 Four things come out of that table.
+
 
 **A calibrated regional curve is the best predictor**, and it is a usable one:
 `r sprintf("%.1f", cnt_best$mae)` days of mean absolute error on the median
@@ -1946,12 +1948,31 @@ bayessbw's year-to-year placement carries less of the signal the catches
 follow, consistent with its weaker year-mean correlation in
 @tbl-compare-structure.
 
-**The fitted exponent on the regional curve is
-`r sprintf("%.2f", cnt_sum$exponent)`.** That is the quiet headline: the
-model's curve is damped almost to flatness, and the shape of the prediction
-comes mostly from the fitted correction around the modelled median. What the
-development model contributes is *when* the season is centred — which year
-runs early, which runs late — rather than the form of the curve.
+**Almost all of the shape is empirical.** The fitted exponent on the regional
+curve is `r sprintf("%.2f", cnt_sum$exponent)`, so the modelled curve enters
+the prediction heavily damped. `reg-med` settles how much it is worth by
+removing it altogether and keeping only the spline in days from its median:
+that costs nothing on timing
+(`r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "reg-med"])` days
+of mean absolute error against
+`r sprintf("%.2f", cnt_best_all$mae[cnt_best_all$model == "reg+"])`, the same
+`r sprintf("%.0f%%", 100 * mean(abs(cnt_cv$err_p50[cnt_cv$model == "reg-med"]) <= 5))`
+inside five days) and a little on the nightly likelihood
+(`r sprintf("%.2f", cnt_best_all$per_moth[cnt_best_all$model == "reg-med"])`
+against `r sprintf("%.2f", cnt_best_all$per_moth[cnt_best_all$model == "reg+"])`
+per moth). So what the development model contributes is *when* the season is
+centred — which year runs early, which runs late — and the curve's own form
+adds only a marginal sharpening of the nightly fit.
+
+Measured on the trapped nights, where the fit is supported, the correction
+moves the predicted median `r sprintf("%+.1f", cnt_sum$shift)` days relative
+to BioSIM's curve as delivered, with a spread of
+`r sprintf("%.1f", cnt_sum$shift_sd)` days across locality-years, and it
+widens the predicted central 90% from
+`r sprintf("%.1f", cnt_sum$raw_width)` to `r sprintf("%.1f", cnt_sum$cal_width)`
+days. The observed central 90% is `r sprintf("%.1f", cnt_sum$obs_width)` days,
+so the calibrated prediction is well centred but too broad: it is a good
+predictor of the median date and an over-dispersed one of the season's spread.
 
 ```{r}
 #| label: fig-count-skill
@@ -2031,7 +2052,9 @@ in the north — so the gradient is corrected on average rather than explained.
 It predicts **timing**, out of sample, to about three days on the median and
 within five days four times out of five. That is enough to say when a flight
 season will be centred at a Maine locality given the year's weather, which is
-the operational question.
+the operational question. Its predicted **spread** is too wide by about half
+again, so a prediction interval taken straight from the fitted curve will be
+conservative.
 
 It does not predict **how many** moths will be caught: the season total is an
 input, not an output. It also does not separate flight from trappability.
