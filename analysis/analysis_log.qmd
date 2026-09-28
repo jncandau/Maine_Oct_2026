@@ -1463,8 +1463,11 @@ summary statistics.
   host, shading or microclimate modifier — and what neither contains:
   immigration. @sec-lag narrows it further: the southern catch curves are
   displaced late by a week or more at unchanged width, so whatever is missing
-  acts like a site-fixed delay rather than a broadening. Nightly trapping
-  conditions and a systematic search for second modes are the next tests.
+  acts like a site-fixed delay rather than a broadening. @sec-sync narrows it
+  again, and changes its shape: the observed dates carry almost no
+  latitudinal gradient while both models impose one of about four days per
+  degree, so this is a gradient-slope error rather than a southern site
+  effect.
 - **Trap attraction is not modelled at all.** The observed curve is a catch
   curve. Nightly weather gates flight and gates trapping, and neither is in the
   comparison yet; the hourly CaSR variables extracted for every locality-year —
@@ -1473,3 +1476,185 @@ summary statistics.
   to 10% would return 12 further records and the years 1987 and 1988; whether
   the added truncation is acceptable is a judgement the sensitivity table in
   @sec-traps supports.
+
+# Is flight synchronous across Maine? {#sec-sync}
+
+```{r}
+#| label: sync-data
+synchrony <- readRDS(file.path("data", "processed", "flight_synchrony.rds"))
+sync_grad  <- synchrony$gradients
+sync_gaps  <- synchrony$gaps
+sync_pairs <- synchrony$pairs
+sync_sum   <- synchrony$summary
+```
+
+@sec-compare leaves both models early in the south, and @sec-lag rules out a
+missing pupal stage as the cause. That leaves a site-level effect neither
+model contains, and immigration — a locality's catch need not be its own
+cohort. `R/07_flight_synchrony.R` tests the second without using weather at
+all, by asking whether southern catches happen on the region's dates or on
+their own. Two predictions separate the explanations: a wave of moths arriving
+from the north would flatten the latitudinal gradient in catch dates, and at
+nightly resolution it would make distant localities spike on the same
+calendar nights.
+
+## The latitudinal gradient
+
+```{r}
+#| label: tbl-sync-gradient
+#| tbl-cap: "Days per degree of latitude, with year fixed effects so that the interannual signal common to all localities is removed"
+## Column names are set afterwards: R does not accept \u escapes inside
+## backtick-quoted names.
+sync_grad |>
+  transmute(Series = series, n,
+            per_degree = sprintf("%+.2f", d_per_degree),
+            ci = sprintf("%+.2f to %+.2f", lo, hi),
+            spread = sprintf("%.1f", d_per_degree * sync_sum$lat_span)) |>
+  setNames(c("Series", "n", "d per \u00b0N", "95% CI", "implied spread, d")) |>
+  kable(align = c("l", "r", "r", "r", "r"))
+```
+
+Over the `r sprintf("%.1f", sync_sum$lat_span)` degrees of latitude the trap
+network spans, the observed median catch date moves by
+**`r sprintf("%.1f", sync_sum$obs_spread)` days**; BioSIM moves it by
+`r sprintf("%.1f", sync_sum$sim_spread)` and bayessbw by
+`r sprintf("%.1f", sync_sum$bayes_spread)`. The observed gradient is not
+distinguishable from zero, and it stays flat on the best-sampled records while
+BioSIM's stays steep on the same rows.
+
+```{r}
+#| label: fig-sync-gradient
+#| fig-cap: "Median catch date and modelled median flight date against latitude, both with the year mean removed so that localities from different years are comparable. Lines are ordinary least squares. The observed dates carry almost no latitudinal gradient; both models impose one of about four days per degree."
+#| fig-width: 6.5
+#| fig-height: 4.2
+library(ggplot2)
+
+cmp_anom <- cmp |>
+  group_by(Year) |>
+  mutate(obs_a = obs_p50 - mean(obs_p50),
+         sim_a = sim_p50 - mean(sim_p50)) |>
+  ungroup() |>
+  select(Latitude, obs_a, sim_a) |>
+  tidyr::pivot_longer(c(obs_a, sim_a), names_to = "which", values_to = "anom") |>
+  mutate(which = factor(ifelse(which == "obs_a", "Observed catch",
+                               "BioSIM flight"),
+                        levels = c("BioSIM flight", "Observed catch")))
+
+ggplot(cmp_anom, aes(Latitude, anom, colour = which, fill = which)) +
+  geom_hline(yintercept = 0, colour = "grey45", linetype = "22") +
+  geom_point(size = 1.6, alpha = 0.5) +
+  geom_smooth(method = "lm", formula = y ~ x, linewidth = 0.8, alpha = 0.18) +
+  scale_colour_manual(values = c("BioSIM flight" = "#1f6f8b",
+                                 "Observed catch" = "#b3541e")) +
+  scale_fill_manual(values = c("BioSIM flight" = "#1f6f8b",
+                               "Observed catch" = "#b3541e")) +
+  labs(title = "The catches carry no latitudinal gradient; the model imposes one",
+       x = "Latitude (\u00b0N)",
+       y = "Days from that year's mean",
+       colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(),
+        plot.title = element_text(size = 10, face = "plain"),
+        legend.position = "inside",
+        legend.position.inside = c(0.02, 0.02),
+        legend.justification = c(0, 0),
+        legend.background = element_blank())
+```
+
+```{r}
+#| label: tbl-sync-gaps
+#| tbl-cap: "South minus north in each year with at least two localities in both halves of the network (split at 45.5 \u00b0N)"
+sync_gaps |>
+  transmute(Year = as.character(Year),
+            `northern localities` = n_north, `southern` = n_south,
+            `observed gap, d` = round(obs_gap, 1),
+            `modelled gap, d` = round(sim_gap, 1)) |>
+  kable(align = c("l", "r", "r", "r", "r"))
+```
+
+Averaged over those `r nrow(sync_gaps)` years the southern localities catch
+their moths `r sprintf("%.1f", abs(sync_sum$obs_gap))` days before the
+northern ones; the model puts them `r sprintf("%.1f", abs(sync_sum$sim_gap))`
+days ahead. Seasonal timing across the network is, to within a couple of days,
+the same everywhere.
+
+This reframes the residual of @sec-compare. What looked like a southern site
+effect is a **gradient-slope error**: both models spread flight across Maine
+about seven times more than the catches do, and the offset we were measuring
+is the difference between a steep modelled gradient and a flat observed one.
+It also explains why both models show it despite running on different weather,
+and why the worst sites are the extreme ones.
+
+## Nightly synchrony
+
+A flat seasonal gradient is consistent with immigration, but also with a
+regionally synchronous emergence that the models exaggerate. The nightly
+curves separate the two: arriving moths should make distant localities spike
+together.
+
+```{r}
+#| label: tbl-sync-pairs
+#| tbl-cap: "Correlation of nightly catch shares between localities trapped in the same year. The null pairs the same two localities in different years, averaged over 20 draws"
+sync_pairs |>
+  mutate(pair_type = recode(pair_type, NN = "North \u2013 north",
+                            NS = "North \u2013 south", SS = "South \u2013 south")) |>
+  group_by(`Pair` = pair_type) |>
+  summarise(pairs = n(),
+            `median r` = round(median(r0), 2),
+            `% above 0.5` = round(100 * mean(r0 > 0.5)),
+            `median distance, km` = round(median(dist_km)),
+            `median best lag, d` = median(lag_best, na.rm = TRUE),
+            .groups = "drop") |>
+  kable(align = c("l", "r", "r", "r", "r", "r"))
+```
+
+Over all `r sync_sum$n_pairs` pairs the median correlation is
+`r sprintf("%.2f", sync_sum$r0_median)` against a shuffled-year null of
+`r sprintf("%.2f", sync_sum$null_median)`, and
+`r sprintf("%.0f%%", 100 * sync_sum$r0_above_half)` of pairs exceed 0.5
+against `r sprintf("%.0f%%", 100 * sync_sum$null_above_half)` in the null. So
+same-night synchrony is real. It is also **local**:
+
+```{r}
+#| label: tbl-sync-distance
+#| tbl-cap: "Nightly synchrony against separation"
+sync_pairs |>
+  mutate(band = cut(dist_km, c(0, 50, 100, 200, 400, Inf),
+                    labels = c("under 50 km", "50\u2013100", "100\u2013200",
+                               "200\u2013400", "over 400"))) |>
+  group_by(`Separation` = band) |>
+  summarise(pairs = n(), `median r` = round(median(r0), 2),
+            `% above 0.5` = round(100 * mean(r0 > 0.5)), .groups = "drop") |>
+  kable(align = c("l", "r", "r", "r"))
+```
+
+Synchrony decays with distance, and the north–south pairs are the weakest of
+the three types despite having the same null. The best lag is zero days for
+every pair type, so there is no systematic delay of the kind transport would
+impose.
+
+That is the opposite of what a northward wave delivering the southern catch
+would produce. What the nightly data show is nearby traps sharing flight
+nights — local weather gating flight and trappability — and southern traps
+sharing few nights with northern ones.
+
+## What this says about immigration
+
+The hypothesis survives at the seasonal scale and fails at the nightly one.
+The more parsimonious reading of both results is that real flight across
+Maine is nearly synchronous and that both development models exaggerate how
+strongly latitude and temperature spread it: the gradient is wrong, rather
+than the southern catch being foreign.
+
+Two caveats keep immigration alive. Arrivals need not be simultaneous across
+localities, because the wind fields differ from night to night, so weak
+north–south nightly correlation is not proof of absence. And elevation is
+absent from the whole analysis — BioSIM was run with `elev = NaN` and the CaSR
+extraction carries no terrain — so part of what is called a latitudinal
+gradient here could be topographic.
+
+The cheapest next test follows directly: if flight really is regionally
+synchronous, a model driven by one regional mean temperature series should
+predict the catches about as well as the site-specific runs do. That is one
+re-run of the existing pipeline on an averaged weather series, and it would
+put a number on how much site-specific weather is buying us.
