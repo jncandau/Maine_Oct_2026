@@ -4,14 +4,17 @@
 # Assemble the seasonal results into a predictor of the nightly distribution
 # of a season's catch, and score it out of sample.
 #
-#   centre  the median catch date, from the split model of 03: the year mean of
-#           predicted median pupation over the network plus the locality's
-#           departure from it, each with its own slope
+#   centre  the median catch date, from the split form of 03: the year mean of
+#           a development-model date over the network plus the locality's
+#           departure from it, each with its own slope. Three drivers are
+#           carried: BioSIM flight (the adopted centre, 08), BioSIM pupation
+#           and bayessbw pupation (the drivers the predictor was developed
+#           with, kept so that the log's development section reproduces)
 #   width   the central 90% of the season, from the season total (04), on the
 #           widths with their sampling bias removed, so that the curve
 #           describes the season and the count noise is left to the nights.
-#           Variant: the predicted spread of pupation (p95 - p05) as a second
-#           covariate.
+#           Variant: the predicted spread of the driver's own distribution
+#           (p95 - p05) as a second covariate.
 #   shape   symmetric about the median (decision in the log): normal, logistic
 #           or Laplace, with its scale set so that its central 90% equals the
 #           predicted width
@@ -41,8 +44,9 @@
 #   Oracle variants, leave-one-year-out only, replace the predicted centre
 #   and/or width by the observed ones: they show what each component costs.
 #
-# INPUT   data/processed/seasonal/season_percentiles.rds, median_vs_pupation.rds,
+# INPUT   data/processed/seasonal/median_vs_pupation.rds (analysis set),
 #         width_vs_catch.rds, pupation_dates.rds
+#         data/processed/biosim_phenology.rds (R/03: the flight series)
 #         data/processed/trap_daily.rds
 #
 # OUTPUT  data/processed/seasonal/seasonal_predictor.rds
@@ -63,26 +67,41 @@ eps     <- 0.001
 
 ## ---- 1. Inputs -------------------------------------------------------------------
 
-mvp    <- readRDS(file.path(out_dir, "median_vs_pupation.rds"))$data   # long, per driver
+## The analysis set of 03 (usable for phenology, complete BioSIM cohort).
+base <- readRDS(file.path(out_dir, "median_vs_pupation.rds"))$data %>%
+  distinct(flightID, Location, Year, p50)
 widths <- readRDS(file.path(out_dir, "width_vs_catch.rds"))$data %>%
   select(flightID, width90, width90_adj, log_total)
-pup    <- readRDS(file.path(out_dir, "pupation_dates.rds")) %>%
-  transmute(Location, Year,
-            BioSIM   = biosim_pup_p95 - biosim_pup_p05,
-            bayessbw = bayes_pup_p95 - bayes_pup_p05) %>%
-  tidyr::pivot_longer(c(BioSIM, bayessbw), names_to = "driver",
-                      values_to = "pup_width")
 
-dat <- mvp %>%
+## Each driver: its median date (x) and the spread of its distribution.
+pupation <- readRDS(file.path(out_dir, "pupation_dates.rds"))
+flight   <- readRDS(file.path("data", "processed", "biosim_phenology.rds")) %>%
+  filter(series == "Flight_mf")
+drivers <- bind_rows(
+  transmute(flight, Location, Year, driver = "BioSIM flight",
+            x = p50, spread = p95 - p05),
+  transmute(pupation, Location, Year, driver = "BioSIM pupation",
+            x = biosim_pup_p50, spread = biosim_pup_p95 - biosim_pup_p05),
+  transmute(pupation, Location, Year, driver = "bayessbw pupation",
+            x = bayes_pup_p50, spread = bayes_pup_p95 - bayes_pup_p05)
+)
+driver_names <- c("BioSIM flight", "BioSIM pupation", "bayessbw pupation")
+
+## Split terms over the analysis set, per driver and year.
+dat <- base %>%
   inner_join(widths, by = "flightID") %>%
-  left_join(pup, by = c("Location", "Year", "driver"))
+  inner_join(drivers, by = c("Location", "Year"), relationship = "one-to-many") %>%
+  group_by(driver, Year) %>%
+  mutate(xY = mean(x), xW = x - mean(x)) %>%
+  ungroup()
 
 nights <- readRDS(file.path("data", "processed", "trap_daily.rds")) %>%
   filter(status == "counted", flightID %in% dat$flightID) %>%
   select(flightID, doy, moths) %>%
   arrange(flightID, doy)
 
-stopifnot(!any(is.na(dat$width90_adj)), !any(is.na(dat$pup_width)))
+stopifnot(!any(is.na(dat$width90_adj)), !any(is.na(dat$x)), !any(is.na(dat$spread)),
+          all(table(dat$driver) == nrow(base)))
 
 
 ## ---- 2. Curves --------------------------------------------------------------------
@@ -93,11 +112,11 @@ shapes <- season_shapes
 
 ## ---- 3. Component models ------------------------------------------------------------
 
-centre_fit <- function(train) stats::lm(p50 ~ pupY + pupW, data = train)
+centre_fit <- function(train) stats::lm(p50 ~ xY + xW, data = train)
 width_fits <- list(
   catch          = function(train) stats::lm(width90_adj ~ log_total, data = train),
-  `catch + pupal spread` =
-    function(train) stats::lm(width90_adj ~ log_total + pup_width, data = train)
+  `catch + driver spread` =
+    function(train) stats::lm(width90_adj ~ log_total + spread, data = train)
 )
 
 ## Predicted (centre, width) for the test records of one fold. `oracle`
@@ -150,7 +169,7 @@ run <- function(driver, scheme, width_model, shape, oracle = "none",
   out
 }
 
-grid <- expand.grid(driver = c("BioSIM", "bayessbw"),
+grid <- expand.grid(driver = driver_names,
                     scheme = c("leave-one-year-out", "leave-one-locality-out"),
                     width_model = names(width_fits),
                     shape = names(shapes), integrate = c(FALSE, TRUE),
@@ -162,7 +181,7 @@ scores <- bind_rows(lapply(seq_len(nrow(grid)), function(i)
   arrange(scheme, desc(log_score))
 
 ## Oracles: leave-one-year-out, logistic, width from catch.
-oracle <- bind_rows(lapply(c("BioSIM", "bayessbw"), function(dr)
+oracle <- bind_rows(lapply(driver_names, function(dr)
   bind_rows(lapply(c("none", "width", "centre", "both"), function(o)
     run(dr, "leave-one-year-out", "catch", "logistic", oracle = o)))))
 
@@ -172,7 +191,7 @@ oracle <- bind_rows(lapply(c("BioSIM", "bayessbw"), function(dr)
 ## What seasonal_dynamics/R/functions/predict_season.R needs: the centre
 ## coefficients and its residual SD (the centre uncertainty), and the width
 ## coefficients on the season total.
-fits <- lapply(c(BioSIM = "BioSIM", bayessbw = "bayessbw"), function(dr) {
+fits <- lapply(setNames(driver_names, driver_names), function(dr) {
   d  <- dat[dat$driver == dr, ]
   cf <- centre_fit(d)
   list(centre = stats::coef(cf), sigma = stats::sigma(cf),
@@ -185,6 +204,7 @@ fits <- lapply(c(BioSIM = "BioSIM", bayessbw = "bayessbw"), function(dr) {
 
 best <- scores %>% filter(scheme == "leave-one-year-out") %>% slice(1)
 summary_list <- list(n = n_distinct(dat$flightID), n_nights = nrow(nights),
+                     adopted = "BioSIM flight",
                      eps = eps, best = best, fits = fits)
 
 nights_best <- attr(run(best$driver, best$scheme, best$width_model, best$shape,
@@ -201,13 +221,13 @@ for (sc in unique(scores$scheme)) {
   cat("  ", sc, "\n", sep = "")
   s <- filter(scores, scheme == sc)
   for (i in seq_len(nrow(s))) cat(sprintf(
-    "    %-9s %-22s %-9s %-10s log score %7.3f | median MAE %4.2f d | width err %+5.2f d (adj) %+5.2f d (obs)\n",
+    "    %-17s %-22s %-9s %-10s log score %7.3f | median MAE %4.2f d | width err %+5.2f d (adj) %+5.2f d (obs)\n",
     s$driver[i], s$width_model[i], s$shape[i],
     if (s$integrate[i]) sprintf("sigma %.1f", s$sigma[i]) else "fixed", s$log_score[i], s$mae_median[i],
     s$width_err_adj[i], s$width_err_obs[i]))
 }
 cat("  oracles (leave-one-year-out, logistic, width from catch):\n")
 for (i in seq_len(nrow(oracle))) cat(sprintf(
-  "    %-9s observed %-7s log score %7.3f | median MAE %4.2f d\n",
+  "    %-17s observed %-7s log score %7.3f | median MAE %4.2f d\n",
   oracle$driver[i], oracle$oracle[i], oracle$log_score[i], oracle$mae_median[i]))
 cat("  written to data/processed/seasonal/seasonal_predictor.rds\n")
