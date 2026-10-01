@@ -62,9 +62,19 @@ material <- 0.01   # censored share above which a record is called material
 
 ## ---- 2. Which records are affected ------------------------------------------
 
+## Records removed by hand in R/01 are assessed alongside the rest: the
+## exclusion was made on this diagnostic, so the diagnostic has to keep
+## reporting it. `excluded` marks them, and the summary counts below are taken
+## over the analysis set only.
+excluded <- readRDS(file.path("data", "processed", "trap_excluded.rds"))
+
+trap_records <- bind_rows(mutate(trap_records, excluded = FALSE),
+                          mutate(excluded$records, excluded = TRUE))
+trap_daily   <- bind_rows(trap_daily, excluded$daily)
+
 affected <- trap_records %>%
   filter(n_cens_left + n_cens_right > 0) %>%
-  transmute(flightID, locality, year, season_total,
+  transmute(flightID, locality, year, season_total, excluded,
             n_cens_left, n_cens_right,
             side = case_when(n_cens_right == 0 ~ "left",
                              n_cens_left  == 0 ~ "right",
@@ -127,7 +137,8 @@ rows <- affected %>%
   left_join(bind_rows(lapply(affected$flightID, assess_one)), by = "flightID") %>%
   left_join(select(cmp, flightID, usable_phenology, flight_complete, comparable),
             by = "flightID") %>%
-  mutate(is_material = assessed & cens_share > material) %>%
+  mutate(is_material = assessed & cens_share > material,
+         comparable  = comparable & !excluded) %>%
   arrange(desc(cens_share))
 
 
@@ -155,18 +166,22 @@ headline <- tibble(
 
 ## ---- 5. Summary and output ---------------------------------------------------
 
+keep <- !rows$excluded
+
 summary_list <- list(
-  n_cens_nights   = sum(trap_daily$status == "missing"),
-  n_left          = sum(trap_daily$censoring == "left",  na.rm = TRUE),
-  n_right         = sum(trap_daily$censoring == "right", na.rm = TRUE),
-  n_records       = nrow(rows),
-  n_assessed      = sum(rows$assessed),
+  n_cens_nights   = sum(trap_daily$status == "missing" &
+                        !trap_daily$flightID %in% excluded$records$flightID),
+  n_left          = sum(rows$n_cens_left[keep]),
+  n_right         = sum(rows$n_cens_right[keep]),
+  n_records       = sum(keep),
+  n_assessed      = sum(rows$assessed & keep),
   n_comparable    = sum(rows$comparable, na.rm = TRUE),
-  n_material      = sum(rows$is_material, na.rm = TRUE),
-  median_share    = median(rows$cens_share[rows$assessed]),
-  max_share       = max(rows$cens_share[rows$assessed]),
-  max_shift_p50   = max(abs(rows$d_p50[rows$assessed])),
-  max_shift_p95   = max(abs(rows$d_p95[rows$assessed])),
+  n_material      = sum(rows$is_material & keep, na.rm = TRUE),
+  n_excluded      = sum(rows$excluded),
+  median_share    = median(rows$cens_share[rows$assessed & keep]),
+  max_share       = max(rows$cens_share[rows$assessed & keep]),
+  max_shift_p50   = max(abs(rows$d_p50[rows$assessed & keep])),
+  max_shift_p95   = max(abs(rows$d_p95[rows$assessed & keep])),
   driver          = driver,
   kappa           = kappa,
   material_cut    = material,

@@ -113,6 +113,16 @@ code_missing     <- "m"   # date sampled but value missing
 ## rise of the season from nights that bound its decline.
 censor_cut_md <- "07-15"
 
+## Records removed by hand, with the reason. The rule everywhere else in this
+## project is to flag rather than to drop, so this list is deliberately short
+## and each entry names the diagnostic that justified it.
+##   509  Elliotsville Township 1978: its only two censored nights are 8-9 July,
+##        at the peak of the season, and the fitted predictor expects a third of
+##        the whole season's catch on them (R/14_censoring.R). The observed
+##        curve is not a flight curve with a gap but one missing its peak, so no
+##        percentile taken from it is identifiable.
+exclude_records <- c(509L)
+
 
 ## ---- 2. Read the Flight sheet ----------------------------------------------
 
@@ -373,8 +383,21 @@ dropped_small <- trap_records %>%
   filter(season_total <= min_season_total | is.na(season_total)) %>%
   select(flightID, year, locality, has_daily, n_nights, season_total)
 
+dropped_excluded <- trap_records %>%
+  filter(flightID %in% exclude_records) %>%
+  select(flightID, year, locality, n_nights, n_missing, season_total)
+
+## The nights of an excluded record are kept in their own file rather than
+## discarded: the diagnostic that justified the exclusion (R/14_censoring.R)
+## has to stay reproducible, and a record removed by hand should remain
+## inspectable by whoever questions the decision.
+trap_excluded <- list(
+  records = filter(trap_records, flightID %in% exclude_records),
+  daily   = filter(trap_daily,   flightID %in% exclude_records)
+)
+
 trap_records <- trap_records %>%
-  filter(season_total > min_season_total)
+  filter(season_total > min_season_total, !flightID %in% exclude_records)
 
 ## Keep the two tables in step: trap_daily must hold only the retained records.
 trap_daily <- trap_daily %>%
@@ -446,11 +469,12 @@ trap_records <- trap_records %>%
 dir.create(file.path("data", "processed"), showWarnings = FALSE, recursive = TRUE)
 saveRDS(trap_records, file.path("data", "processed", "trap_records.rds"))
 saveRDS(trap_daily,   file.path("data", "processed", "trap_daily.rds"))
+saveRDS(trap_excluded, file.path("data", "processed", "trap_excluded.rds"))
 
 message(sprintf(
   paste0("Trap data read: %d records (%s, %s, %d-%d, season total > %d) ",
          "at %d localities, %d trap-nights.\n",
-         "  usable for phenology: %d | dropped below threshold: %d",
+         "  usable for phenology: %d | dropped below threshold: %d | removed by hand: %d",
          " | total mismatches vs workbook: %d | duplicated site-years: %d"),
   nrow(trap_records), paste(keep_states, collapse = "/"),
   paste(keep_methods, collapse = "/"),
@@ -458,5 +482,6 @@ message(sprintf(
   n_distinct(trap_records$locality),
   sum(trap_daily$status == "counted"),
   sum(trap_records$usable_phenology),
-  nrow(dropped_small), nrow(total_mismatch), nrow(duplicate_records)
+  nrow(dropped_small), nrow(dropped_excluded),
+  nrow(total_mismatch), nrow(duplicate_records)
 ))

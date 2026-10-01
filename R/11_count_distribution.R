@@ -81,10 +81,20 @@ fit_or_null <- function(label, ...) {
   f
 }
 
-if (reuse && file.exists(out_file)) {
-  previous <- readRDS(out_file)
+## Reusing the stored fits is only safe while the data are the same. A cached
+## fit from a larger night set silently produces vectors of the wrong length
+## downstream, so the row count is stored with the fits and checked here.
+previous <- if (file.exists(out_file)) readRDS(out_file) else NULL
+cache_ok <- reuse && !is.null(previous) &&
+  identical(previous$summary$n_nights, nrow(nights))
+
+if (cache_ok) {
   fits <- previous$fits
 } else {
+  if (reuse && !is.null(previous)) {
+    message("  night set changed (", previous$summary$n_nights, " -> ", nrow(nights),
+            "): refitting rather than reusing the stored fits.")
+  }
   fits <- list(
     poisson = fit_or_null("poisson", form, data = nights, family = poisson()),
     nbinom1 = fit_or_null("nbinom1", form, data = nights, family = nbinom1()),

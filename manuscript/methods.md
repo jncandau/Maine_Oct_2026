@@ -16,9 +16,9 @@ the overlap with the reanalysis described below — with a season total above 99
 moths, a threshold that removes records too sparse to describe a flight curve.
 Where one trap was reported as separate male and female records, the two were
 summed night by night before the threshold was applied (two traps in 1980).
-The working dataset comprised **227 trapping records at 49 localities over 22
+The working dataset comprised **226 trapping records at 49 localities over 22
 years** (43.60–47.44° N, 67.33–70.85° W), reshaped to one row per trap-night:
-5,612 counted nights and 154 missing.
+5,590 counted nights and 152 missing.
 
 Missing nights were treated as censoring rather than as nights of unknown
 catch drawn from the whole season. Because flight is a seasonal curve, the
@@ -31,11 +31,17 @@ percentiles are not identifiable at face value can be identified rather than
 treated as complete.
 
 Records were flagged rather than filtered, so that every subsequent table
-could report the population it referred to. `usable_phenology` (n = 187) marks
+could report the population it referred to. `usable_phenology` (n = 186) marks
 records whose daily series is complete enough to describe a flight curve;
-`flight_complete` (n = 207) marks those whose trapping period brackets the
-modelled flight season; their intersection, `comparable` (n = **170**
+`flight_complete` (n = 206) marks those whose trapping period brackets the
+modelled flight season; their intersection, `comparable` (n = **169**
 locality-years), is the set used for all model comparisons.
+
+One record was removed from the dataset rather than flagged: a trap whose only
+two censored nights fell at the peak of its season, where the fitted model
+expects a third of the whole catch, leaving none of its percentiles
+identifiable. Its nights are retained in a separate file so that the
+diagnostic which justified the exclusion remains reproducible.
 
 ## Observed flight phenology
 
@@ -60,7 +66,8 @@ stored 3-hourly and was interpolated to hourly with
 `chillR::interpolate_gaps_hourly()`, which fits a daily temperature cycle from
 the daily minima and maxima and interpolates the residuals; the raw 3-hourly
 values were retained alongside so the interpolation remains auditable. The result is one
-nested hourly series per locality-year — 227 series, 1,989,744 hourly rows —
+nested hourly series per locality-year — 227 series, 1,989,744 hourly rows, one of them belonging to the record
+excluded above —
 timestamped in UTC and in local standard time (UTC−5, no daylight saving),
 the latter used for all nightly aggregation.
 
@@ -99,7 +106,8 @@ post-diapause L2 emergence.
 
 **Regional versus site-specific driving.** Both models were run twice: once at
 each trap's own coordinates and once at a single regional point, the centroid
-of the trap network (45.718° N, 69.164° W). The two were compared by their
+of the trap network (45.72° N, 69.16° W; the regional-weather test used 45.64° N, 69.12° W, the
+locality-year rather than the locality mean). The two were compared by their
 ability to predict the observed median catch date out of sample, and the
 regional run was carried forward (see Results).
 
@@ -140,7 +148,7 @@ site-specific rather than regional drivers — were fitted in the same framework
 
 ## Conditional distribution of a night's catch
 
-The distributional family was selected on the 4,319 nights of the analysis set
+The distributional family was selected on the 4,297 nights of the analysis set
 by AIC among Poisson, type-1 and type-2 negative binomial, Poisson-lognormal
 and zero-inflated negative binomial fits with the same mean structure. The
 empirical variance–mean relationship was estimated by binning nights on a
