@@ -672,13 +672,48 @@ catches themselves, night by night, which is a question for the daily
 analysis.
 
 
+## Decision: the season is treated as symmetric {#sec-asym-decision}
+
+```{r}
+#| label: shape-data
+shp <- readRDS(file.path("data", "processed", "seasonal", "asymmetry.rds"))$data |>
+  mutate(ratio = width50 / width90)
+shape_theory <- c(
+  normal   = (qnorm(0.75) - qnorm(0.25)) / (qnorm(0.95) - qnorm(0.05)),
+  logistic = (qlogis(0.75) - qlogis(0.25)) / (qlogis(0.95) - qlogis(0.05)),
+  laplace  = log(2) / log(10))
+set.seed(1978)
+shape_ci <- stats::quantile(replicate(2000, stats::median(sample(shp$ratio, replace = TRUE))),
+                            c(0.025, 0.975), names = FALSE)
+```
+
+The typical season is symmetric (@sec-asym), its asymmetry is idiosyncratic
+to the locality-year, and the one systematic pattern — the early start of
+habitually late localities (@sec-asym-mech) — is a within-year contrast that a
+model of the whole network does not need. The seasonal model therefore treats
+the flight season as **symmetric about its median**. Asymmetry is not modelled.
+
+A symmetric season still needs a shape, and the ratio of the central 50% to
+the central 90% of the catch identifies it without fitting anything. For a
+normal curve the ratio is `r sprintf("%.3f", shape_theory[["normal"]])`, for a
+logistic `r sprintf("%.3f", shape_theory[["logistic"]])` and for a Laplace
+(double exponential) `r sprintf("%.3f", shape_theory[["laplace"]])`. The
+observed median is `r sprintf("%.3f", median(shp$ratio))`
+(`r sprintf("%.3f", shape_ci[1])` to `r sprintf("%.3f", shape_ci[2])` over
+`r nrow(shp)` locality-years), and `r sprintf("%.3f", median(shp$ratio[shp$season_total >= 3000]))`
+in the seasons of 3,000 moths or more, where the percentiles are most precise.
+The season is more peaked, with heavier tails, than a normal curve. A logistic
+is consistent with the data as a whole, and the best-sampled seasons lie
+between the logistic and the Laplace.
+
+
 # Next steps
 
-1. **Asymmetry, the early fraction at late localities** (@sec-asym-mech):
-   whether the first moths caught at a habitually late locality fly on the
-   same nights as the peak elsewhere (arrivals) or follow local temperature
-   (warm pockets). This needs the nightly series and belongs with the daily
-   analysis.
+1. **A seasonal predictor**: a symmetric curve, logistic or heavier-tailed
+   (@sec-asym-decision), centred on the median catch date predicted from the
+   network mean of predicted pupation (@sec-median), with its width predicted
+   from the season total (@sec-width). Scored, like everything above, on new
+   years and new localities.
 2. **Temperature summaries per locality-year**, as an alternative driver to
    the development models: degree-days and window means, at the trap and
    averaged over the network.

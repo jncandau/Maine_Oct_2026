@@ -2186,6 +2186,7 @@ vertical-align: -.125em;
   <li><a href="#signal-or-noise" id="toc-signal-or-noise" class="nav-link" data-scroll-target="#signal-or-noise"><span class="header-section-number">6.3</span> Signal or noise?</a></li>
   <li><a href="#what-asymmetry-goes-with" id="toc-what-asymmetry-goes-with" class="nav-link" data-scroll-target="#what-asymmetry-goes-with"><span class="header-section-number">6.4</span> What asymmetry goes with</a></li>
   <li><a href="#sec-asym-mech" id="toc-sec-asym-mech" class="nav-link" data-scroll-target="#sec-asym-mech"><span class="header-section-number">6.5</span> Step 3: which part of the season is shared?</a></li>
+  <li><a href="#sec-asym-decision" id="toc-sec-asym-decision" class="nav-link" data-scroll-target="#sec-asym-decision"><span class="header-section-number">6.6</span> Decision: the season is treated as symmetric</a></li>
   </ul></li>
   <li><a href="#next-steps" id="toc-next-steps" class="nav-link" data-scroll-target="#next-steps"><span class="header-section-number">7</span> Next steps</a></li>
   </ul>
@@ -2836,11 +2837,16 @@ Figure 5: Left: spread of each percentile among the localities of a year, relat
 </ul>
 <p>Geography does not separate the two here. Habitual lateness is barely related to latitude and longitude (R<sup>2</sup> = 0.07 over 33 localities with at least three years). The two most habitually early localities, Greenbush and Passadumkeag, are neighbours in the Penobscot valley, and the late ones are scattered across the state. A dispersal source would have to be identified from the timing of the early catches themselves, night by night, which is a question for the daily analysis.</p>
 </section>
+<section id="sec-asym-decision" class="level2" data-number="6.6">
+<h2 data-number="6.6" class="anchored" data-anchor-id="sec-asym-decision"><span class="header-section-number">6.6</span> Decision: the season is treated as symmetric</h2>
+<p>The typical season is symmetric (<a href="#sec-asym" class="quarto-xref">Section 6</a>), its asymmetry is idiosyncratic to the locality-year, and the one systematic pattern — the early start of habitually late localities (<a href="#sec-asym-mech" class="quarto-xref">Section 6.5</a>) — is a within-year contrast that a model of the whole network does not need. The seasonal model therefore treats the flight season as <strong>symmetric about its median</strong>. Asymmetry is not modelled.</p>
+<p>A symmetric season still needs a shape, and the ratio of the central 50% to the central 90% of the catch identifies it without fitting anything. For a normal curve the ratio is 0.410, for a logistic 0.373 and for a Laplace (double exponential) 0.301. The observed median is 0.350 (0.324 to 0.386 over 222 locality-years), and 0.326 in the seasons of 3,000 moths or more, where the percentiles are most precise. The season is more peaked, with heavier tails, than a normal curve. A logistic is consistent with the data as a whole, and the best-sampled seasons lie between the logistic and the Laplace.</p>
+</section>
 </section>
 <section id="next-steps" class="level1" data-number="7">
 <h1 data-number="7"><span class="header-section-number">7</span> Next steps</h1>
 <ol type="1">
-<li><strong>Asymmetry, the early fraction at late localities</strong> (<a href="#sec-asym-mech" class="quarto-xref">Section 6.5</a>): whether the first moths caught at a habitually late locality fly on the same nights as the peak elsewhere (arrivals) or follow local temperature (warm pockets). This needs the nightly series and belongs with the daily analysis.</li>
+<li><strong>A seasonal predictor</strong>: a symmetric curve, logistic or heavier-tailed (<a href="#sec-asym-decision" class="quarto-xref">Section 6.6</a>), centred on the median catch date predicted from the network mean of predicted pupation (<a href="#sec-median" class="quarto-xref">Section 4</a>), with its width predicted from the season total (<a href="#sec-width" class="quarto-xref">Section 5</a>). Scored, like everything above, on new years and new localities.</li>
 <li><strong>Temperature summaries per locality-year</strong>, as an alternative driver to the development models: degree-days and window means, at the trap and averaged over the network.</li>
 </ol>
 </section>
