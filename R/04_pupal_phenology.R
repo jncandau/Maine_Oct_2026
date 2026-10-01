@@ -44,7 +44,7 @@
 #          roughly 30 min for the 227 locality-years single-threaded; the jobs
 #          are run in parallel over `n_cores`.
 #
-# USAGE  source("daily_dynamics/R/04_pupal_phenology.R")   # from the project root
+# USAGE  source("R/04_pupal_phenology.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

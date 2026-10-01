@@ -61,6 +61,8 @@ hold identically here:
 - one record (Elliotsville Township 1978) is excluded because its only missing
   nights fell at the peak of its season.
 
+The data layer also holds the two development-model runs used below,
+BioSIM (`R/03_biosim_phenology.R`) and bayessbw (`R/04_pupal_phenology.R`).
 Nothing in this analysis reads an output of `daily_dynamics/`.
 
 # The season-level data {#sec-season}
@@ -122,12 +124,282 @@ That pattern, already central to the daily analysis, sets the problem for this
 one: a seasonal model must first explain the differences between years, and
 only then the much smaller differences between localities within a year.
 
+# Predicted pupation dates {#sec-pupation}
+
+```{r}
+#| label: pupation-data
+pup <- readRDS(file.path("data", "processed", "seasonal", "pupation_dates.rds"))
+pup_ok <- filter(pup, biosim_pup_complete)
+```
+
+The two development models of the shared data layer predict pupation, not
+flight: BioSIM (`R/03_biosim_phenology.R`, mortality switched off) and
+bayessbw (`R/04_pupal_phenology.R`). `seasonal_dynamics/R/02_pupation_dates.R`
+puts both on the same footing, as a distribution of pupation dates per
+locality-year.
+
+For bayessbw this is direct: the model returns the date on which each
+simulated individual pupates. BioSIM does not. It reports pupae as a **stock**,
+the share of the cohort that is a pupa on a given day, and the median of that
+curve is the middle of the pupal period rather than the date of pupation. The
+pupation-date distribution is recovered from mass balance. With mortality off,
+an individual that has pupated by day *t* is either still a pupa or has
+already emerged, so cumulative pupation is the pupae present plus the
+cumulative emergence, and its daily increments are the distribution.
+
+The distinction is not cosmetic. The stock median falls a median
+`r sprintf("%.1f", median(pup_ok$biosim_stock_p50 - pup_ok$biosim_pup_p50))`
+days after the true median pupation date, and with the true date BioSIM
+pupates `r sprintf("%.1f", abs(mean(pup_ok$biosim_pup_p50 - pup_ok$bayes_pup_p50)))`
+days *earlier* than bayessbw on average, where the stock median had put the two
+models within a day of each other. The two remain well correlated across
+locality-years (r = `r sprintf("%.2f", cor(pup_ok$biosim_pup_p50, pup_ok$bayes_pup_p50))`).
+
+In `r sum(pup$biosim_pup_lost > 0.5)` locality-years BioSIM's pupae vanish
+within a day without emerging, although mortality is switched off. These are
+all records whose BioSIM cohort R/03 already flags as incomplete, and they
+leave the analysis set below. The pupation dates of the remaining records are
+unaffected.
+
+# The median catch date as a function of pupation {#sec-median}
+
+```{r}
+#| label: median-data
+mvp <- readRDS(file.path("data", "processed", "seasonal", "median_vs_pupation.rds"))
+msc <- mvp$scores
+mco <- mvp$coefs
+mget <- function(sch, dr, mod, col) {
+  msc[[col]][msc$scheme == sch & msc$driver == dr & msc$model == mod]
+}
+cget <- function(dr, mod, term, col = "estimate") {
+  mco[[col]][mco$driver == dr & mco$model == mod & mco$term == term]
+}
+LOYO <- "leave-one-year-out"; LOLO <- "leave-one-locality-out"
+```
+
+`seasonal_dynamics/R/03_median_vs_pupation.R` models the observed median
+catch date of `r mvp$summary$n_rows` locality-years
+(`r mvp$summary$n_years` years, `r mvp$summary$n_locations` localities: usable
+for phenology, with a complete BioSIM cohort) from the predicted median
+pupation date, separately for each model:
+
+- **lag**: median catch date = pupation + a constant interval;
+- **linear**: median catch date = *a* + *b* x pupation;
+- **split**: the predicted pupation date is divided into the mean over the
+  localities of that year and each locality's departure from it, each with its
+  own slope. The year mean uses predicted dates only, so it is available at
+  prediction time.
+
+Each is scored twice: leaving out one year at a time, the test for a new year,
+and leaving out one locality at a time, the test for a new place. Two
+baselines give the scale. *Climatology* predicts the mean date of the training
+data. *Same-year* predicts the mean observed date of the other localities that
+year; it is not a forecast, since it uses the year being predicted, but it is
+the floor that any year-level model faces.
+
+```{r}
+#| label: tbl-median-scores
+#| tbl-cap: "Skill in predicting the observed median catch date (RMSE and MAE in days)"
+msc |>
+  filter(!(model == "same-year" & driver == "bayessbw"),
+         !(model == "climatology" & driver == "bayessbw")) |>
+  mutate(driver = if_else(model %in% c("same-year", "climatology"), "-", driver)) |>
+  tidyr::pivot_wider(id_cols = c(driver, model), names_from = scheme,
+                     values_from = c(rmse, mae)) |>
+  transmute(Driver = driver, Model = model,
+            `RMSE, new year` = sprintf("%.2f", .data[[paste0("rmse_", LOYO)]]),
+            `MAE, new year` = sprintf("%.2f", .data[[paste0("mae_", LOYO)]]),
+            `RMSE, new place` = sprintf("%.2f", .data[[paste0("rmse_", LOLO)]]),
+            `MAE, new place` = sprintf("%.2f", .data[[paste0("mae_", LOLO)]])) |>
+  arrange(Driver == "-", Driver, `RMSE, new year`) |>
+  kable(align = c("l", "l", "r", "r", "r", "r"))
+```
+
+**The fixed-lag model is worse than knowing nothing.** Adding a constant
+interval to either model's pupation date gives an RMSE of
+`r sprintf("%.2f", mget(LOYO, "BioSIM", "lag", "rmse"))` (BioSIM) and
+`r sprintf("%.2f", mget(LOYO, "bayessbw", "lag", "rmse"))` days (bayessbw) for a
+new year, against `r sprintf("%.2f", mget(LOYO, "BioSIM", "climatology", "rmse"))`
+for the climatology.
+
+**The split model shows why.** A year whose predicted pupation is early also
+flies early, with a slope of
+`r sprintf("%.2f", cget("BioSIM", "split", "pupY"))`
+(`r sprintf("%.2f", cget("BioSIM", "split", "pupY", "lo"))` to
+`r sprintf("%.2f", cget("BioSIM", "split", "pupY", "hi"))`) for BioSIM and
+`r sprintf("%.2f", cget("bayessbw", "split", "pupY"))`
+(`r sprintf("%.2f", cget("bayessbw", "split", "pupY", "lo"))` to
+`r sprintf("%.2f", cget("bayessbw", "split", "pupY", "hi"))`) for bayessbw, both
+compatible with one day of flight per day of pupation. But a locality whose
+predicted pupation is early *relative to the others that year* barely flies
+earlier at all: the within-year slopes are
+`r sprintf("%.2f", cget("BioSIM", "split", "pupW"))`
+(`r sprintf("%.2f", cget("BioSIM", "split", "pupW", "lo"))` to
+`r sprintf("%.2f", cget("BioSIM", "split", "pupW", "hi"))`) and
+`r sprintf("%.2f", cget("bayessbw", "split", "pupW"))`
+(`r sprintf("%.2f", cget("bayessbw", "split", "pupW", "lo"))` to
+`r sprintf("%.2f", cget("bayessbw", "split", "pupW", "hi"))`). The models
+place the year correctly and the localities within it wrongly, so a fixed lag
+inherits the full spatial spread of the predictions, which is mostly not there
+in the catches. The coefficients come from mixed models with a random year
+intercept, because locality-years of one year share its weather.
+
+With the split, both drivers beat the climatology for a new year
+(`r sprintf("%.2f", mget(LOYO, "BioSIM", "split", "rmse"))` and
+`r sprintf("%.2f", mget(LOYO, "bayessbw", "split", "rmse"))` days) and for a new
+place (`r sprintf("%.2f", mget(LOLO, "BioSIM", "split", "rmse"))` and
+`r sprintf("%.2f", mget(LOLO, "bayessbw", "split", "rmse"))`), bayessbw by a
+small margin. Both stay well above the same-year floor of
+`r sprintf("%.2f", mget(LOYO, "BioSIM", "same-year", "rmse"))` days.
+
+```{r}
+#| label: fig-median-pupation
+#| fig-cap: "Observed median catch date against predicted median pupation date. Grey: locality-years. Black: year means. Solid line: the year-level slope of the split model through the year means. Dashed line: the fixed-lag model."
+#| fig-width: 9
+#| fig-height: 4.2
+d <- mvp$data
+ym <- d |> group_by(driver, Year) |>
+  summarise(pup = mean(pup), p50 = mean(p50), .groups = "drop")
+lines <- mco |> filter(model == "split", term == "pupY") |>
+  select(driver, slope = estimate) |>
+  left_join(ym |> group_by(driver) |>
+              summarise(mx = mean(pup), my = mean(p50), .groups = "drop"),
+            by = "driver") |>
+  mutate(intercept = my - slope * mx)
+lags <- mco |> filter(model == "lag") |> select(driver, lag = estimate)
+ggplot(d, aes(pup, p50)) +
+  geom_point(colour = "grey70", size = 1) +
+  geom_abline(data = lags, aes(intercept = lag, slope = 1), linetype = "dashed",
+              colour = "grey30") +
+  geom_abline(data = lines, aes(intercept = intercept, slope = slope),
+              colour = "black", linewidth = 0.7) +
+  geom_point(data = ym, colour = "black", size = 1.8) +
+  facet_wrap(~ factor(driver, c("BioSIM", "bayessbw")), scales = "free_x") +
+  labs(x = "Predicted median pupation date (day of year)",
+       y = "Observed median catch date (day of year)") +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank())
+```
+
+The year-level relationship carries the predictive skill. For a new year the
+split model needs only the network mean of the predicted pupation dates; the
+locality's own predicted date adds almost nothing. That is the seasonal
+counterpart of the daily analysis, where a single regional BioSIM run beat
+site-specific runs.
+
+# Season width and the size of the catch {#sec-width}
+
+```{r}
+#| label: width-data
+wvc <- readRDS(file.path("data", "processed", "seasonal", "width_vs_catch.rds"))
+wf <- wvc$fits; wd <- wvc$decomposition; wn <- wvc$null_summary
+wget <- function(w, mod, col) wf[[col]][wf$width == w & wf$model == mod]
+dget <- function(w, comp, col) wd[[col]][wd$width == w & wd$component == comp]
+```
+
+`seasonal_dynamics/R/04_width_vs_catch.R` asks whether the length of the
+flight season depends on how many moths the trap caught, over the
+`r wvc$summary$n` locality-years usable for phenology.
+
+```{r}
+#| label: tbl-width-fits
+#| tbl-cap: "Change in season width per tenfold increase in the season total (days)"
+wf |>
+  transmute(Width = recode(width, width90 = "central 90%", width50 = "central 50%"),
+            Model = model, n,
+            `d per tenfold` = sprintf("%+.2f", slope),
+            `95% CI` = sprintf("%+.2f to %+.2f", lo, hi),
+            `R2` = sprintf("%.3f", r2)) |>
+  kable(align = c("l", "l", "r", "r", "r", "r"))
+```
+
+**Yes: larger catches have shorter seasons.** The central 90% shortens by
+`r sprintf("%.1f", abs(wget("width90", "alone", "slope")))` days per tenfold
+increase in catch, and the central 50% by
+`r sprintf("%.1f", abs(wget("width50", "alone", "slope")))` days. The slope is
+unchanged with year fixed effects and without the one season concentrated on
+a single night.
+
+**Sampling explains part of it, not all.** A percentile estimated from a
+small catch is noisier, and on a spiky seasonal curve that noise need not
+average to zero. The rarefaction null measures the effect directly. Each of
+the `r wvc$summary$n_known` seasons of at least 3,000 moths is treated as a
+known season, `r wvc$summary$null_reps` smaller catches are drawn from it at
+each size, and their widths are measured exactly as for the real data.
+
+```{r}
+#| label: tbl-width-null
+#| tbl-cap: "Width change produced by sampling alone: catches of N moths drawn from seasons of 3,000 or more"
+wn |>
+  transmute(`N moths` = format(N, big.mark = ","),
+            `central 90%, d` = sprintf("%+.2f (sd %.2f)", d_width90, sd_width90),
+            `central 50%, d` = sprintf("%+.2f (sd %.2f)", d_width50, sd_width50)) |>
+  kable(align = c("r", "r", "r"))
+```
+
+Small catches do come out wider, by about a day at 100 moths and by almost
+nothing above 1,000. Subtracting from each record the sampling bias expected
+at its own catch size leaves a slope of
+`r sprintf("%+.2f", wget("width90", "alone, sampling bias removed", "slope"))`
+days per tenfold for the central 90%
+(`r sprintf("%+.2f", wget("width90", "alone, sampling bias removed", "lo"))` to
+`r sprintf("%+.2f", wget("width90", "alone, sampling bias removed", "hi"))`) and
+`r sprintf("%+.2f", wget("width50", "alone, sampling bias removed", "slope"))`
+for the central 50%
+(`r sprintf("%+.2f", wget("width50", "alone, sampling bias removed", "lo"))` to
+`r sprintf("%+.2f", wget("width50", "alone, sampling bias removed", "hi"))`).
+About a fifth of the central-90% effect is sampling; the rest belongs to the
+seasons.
+
+**The effect is within localities.** Over the `r wd$n_localities[1]`
+localities with at least three years, a locality's large-catch years are
+shorter than its small-catch years (r =
+`r sprintf("%+.2f", dget("width90", "within localities", "r"))` for the central
+90%, `r sprintf("%+.2f", dget("width50", "within localities", "r"))` for the
+central 50%). The relationship between locality means is weaker
+(`r sprintf("%+.2f", dget("width90", "between localities", "r"))` and
+`r sprintf("%+.2f", dget("width50", "between localities", "r"))`). This is the
+opposite of the median-date offset of the daily analysis, which belonged to
+the locality and not to the year. Season width tracks how many moths a given
+season produced at a given place.
+
+```{r}
+#| label: fig-width-catch
+#| fig-cap: "Width of the central 90% of the flight season against the season total. Points: locality-years. Solid line: least-squares fit to the observed widths. Dashed line: the fit after subtracting the width that sampling alone adds at each catch size."
+#| fig-width: 6.5
+#| fig-height: 4.2
+wd_dat <- wvc$data
+fit_obs <- stats::lm(width90 ~ log_total, wd_dat)
+fit_adj <- stats::lm(width90_adj ~ log_total, wd_dat)
+grid <- tibble::tibble(log_total = seq(min(wd_dat$log_total), max(wd_dat$log_total),
+                                       length.out = 50)) |>
+  mutate(total = 10^log_total,
+         observed = stats::predict(fit_obs, newdata = pick(everything())),
+         adjusted = stats::predict(fit_adj, newdata = pick(everything())))
+ggplot(wd_dat, aes(season_total, width90)) +
+  geom_point(colour = "grey55", size = 1.2) +
+  geom_line(data = grid, aes(total, observed), colour = "black", linewidth = 0.7) +
+  geom_line(data = grid, aes(total, adjusted), colour = "black", linewidth = 0.7,
+            linetype = "dashed") +
+  scale_x_log10(labels = scales::label_number(big.mark = ",")) +
+  labs(x = "Season total (moths, log scale)",
+       y = "Central 90% of the season (days)") +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank())
+```
+
+What drives it is not established here. Two readings fit a within-locality
+effect: a dense population emerging more synchronously, or a season whose
+total is inflated by a few warm nights of mass flight, which concentrates the
+catch whatever the emergence. The second predicts that the effect weakens once
+nightly temperature is accounted for, which the daily analysis is equipped to
+test.
+
+
 # Next steps
 
-1. **Temperature summaries per locality-year**, from the hourly series of the
-   shared weather layer: degree-days above a range of base temperatures
-   accumulated from a range of start dates, and mean temperatures over fixed
-   calendar windows, computed both at the trap and averaged over the network.
-2. **Models of p50, then of width and asymmetry**, as functions of those
-   summaries, separating the between-year from the within-year component and
-   scored by leave-one-year-out and leave-one-locality-out prediction.
+1. **Asymmetry** (not yet modelled): see the options discussed with the
+   analysis; the first decision is a measure that does not scale with width.
+2. **Temperature summaries per locality-year**, as an alternative driver to
+   the development models: degree-days and window means, at the trap and
+   averaged over the network.

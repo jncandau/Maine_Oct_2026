@@ -57,9 +57,10 @@ Code lives in `R/`, source data in `data/raw/`, processed tables in
 night-by-night distribution of catches. It shares its dataset with a second
 analysis, *Seasonal dynamics* (`seasonal_dynamics/`). The data layer is common
 to both and sits at the project root — `R/01_read_trap_data.R`,
-`R/02_read_weather_data.R`, `R/functions/phenology.R` and `data/`. The scripts
-cited here as `R/03` to `R/14` and `R/functions/predict_flight.R` live under
-`daily_dynamics/R/`.
+`R/02_read_weather_data.R`, the two development-model runs
+`R/03_biosim_phenology.R` and `R/04_pupal_phenology.R`,
+`R/functions/phenology.R` and `data/`. The scripts cited here as `R/05` to
+`R/14` and `R/functions/predict_flight.R` live under `daily_dynamics/R/`.
 
 # Trap data {#sec-traps}
 
