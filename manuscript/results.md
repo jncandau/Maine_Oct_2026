@@ -195,7 +195,7 @@ the quadratic of NB2 and closer to the latter once the fit is weighted by the
 bulk of the data. The fitted NB2 dispersion was θ = 0.190, i.e.
 Var = μ + 5.26 μ², a multiplicative noise with a coefficient of variation of
 2.29: a night expected to yield 100 moths has a standard deviation of 230 and
-a 26% chance of catching none. The two leading families separate on the
+a 30% chance of catching none. The two leading families separate on the
 extremes rather than the centre, and the zero-filled nights widen that gap:
 simulating from the Poisson-lognormal fit produced a maximum night of 801,923
 moths against 27,500 observed, while NB2 produced 100,658. NB2 was therefore adopted for prediction and simulation, and
