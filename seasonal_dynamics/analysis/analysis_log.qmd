@@ -707,13 +707,214 @@ is consistent with the data as a whole, and the best-sampled seasons lie
 between the logistic and the Laplace.
 
 
+# A seasonal predictor {#sec-predictor}
+
+```{r}
+#| label: predictor-data
+sp  <- readRDS(file.path("data", "processed", "seasonal", "seasonal_predictor.rds"))
+sps <- sp$scores; spo <- sp$oracle
+LOYO <- "leave-one-year-out"; LOLO <- "leave-one-locality-out"
+sget <- function(sch, dr, wm, sh, int, col = "log_score") {
+  sps[[col]][sps$scheme == sch & sps$driver == dr & sps$width_model == wm &
+               sps$shape == sh & sps$integrate == int]
+}
+oget <- function(dr, o, col = "log_score") spo[[col]][spo$driver == dr & spo$oracle == o]
+## Error of the centre for a new year, weighted by the size of the catch: the
+## log score per moth gives each season a weight proportional to its catch.
+cerr <- readRDS(file.path("data", "processed", "seasonal", "median_vs_pupation.rds"))$cv |>
+  filter(model == "split", scheme == LOYO) |>
+  left_join(season |> select(flightID, season_total), by = "flightID") |>
+  group_by(driver) |>
+  summarise(mae = mean(abs(pred - obs)),
+            mae_moth = stats::weighted.mean(abs(pred - obs), season_total),
+            .groups = "drop")
+ceget <- function(dr, col) cerr[[col]][cerr$driver == dr]
+```
+
+`seasonal_dynamics/R/07_seasonal_predictor.R` combines the three results above
+into a prediction of how a season's catch is spread over its nights:
+
+- **centre**: the median catch date from the split model of @sec-median, the
+  network mean of predicted pupation plus the locality's departure from it;
+- **width**: the central 90% of the season from the season total
+  (@sec-width), fitted to widths with their sampling bias removed, so that the
+  curve describes the season and the counting noise is left to the nights;
+- **shape**: symmetric about the centre (@sec-asym-decision), with its scale
+  set so that its central 90% equals the predicted width.
+
+The share of night *d* is the curve's mass between *d* - 1 and *d*, which puts
+its median on the same scale as the observed one. A small uniform floor (a
+fraction `r sp$summary$eps` of the season, spread over its nights) keeps every
+night above zero. Shares are then normalised over the record's counted nights.
+Every component is refitted on the training data of each fold, leaving out one
+year at a time and, separately, one locality at a time. The score is the log
+score per moth: the summed log share of the night on which each moth was
+caught, divided by the number of moths. It is the log-likelihood of the
+nightly catch given its total, and higher is better.
+
+## The centre is uncertain, and the curve must say so
+
+```{r}
+#| label: tbl-predictor-scores
+#| tbl-cap: "Log score per moth of the seasonal predictor (logistic shape, width from the season total)"
+tibble::tibble(
+  Driver = rep(c("BioSIM", "bayessbw"), each = 2),
+  Centre = rep(c("placed as if known", "averaged over its uncertainty"), 2),
+  `New year` = c(sget(LOYO, "BioSIM", "catch", "logistic", FALSE),
+                 sget(LOYO, "BioSIM", "catch", "logistic", TRUE),
+                 sget(LOYO, "bayessbw", "catch", "logistic", FALSE),
+                 sget(LOYO, "bayessbw", "catch", "logistic", TRUE)),
+  `New locality` = c(sget(LOLO, "BioSIM", "catch", "logistic", FALSE),
+                     sget(LOLO, "BioSIM", "catch", "logistic", TRUE),
+                     sget(LOLO, "bayessbw", "catch", "logistic", FALSE),
+                     sget(LOLO, "bayessbw", "catch", "logistic", TRUE)),
+  `Median error, new year, d` = c(rep(sget(LOYO, "BioSIM", "catch", "logistic", FALSE, "mae_median"), 2),
+                                  rep(sget(LOYO, "bayessbw", "catch", "logistic", FALSE, "mae_median"), 2))
+) |>
+  mutate(across(c(`New year`, `New locality`), ~ sprintf("%.3f", .x)),
+         `Median error, new year, d` = sprintf("%.2f", `Median error, new year, d`)) |>
+  kable(align = c("l", "l", "r", "r", "r"))
+```
+
+The predicted centre misses the observed median by about four days on
+average. A curve placed as if its centre were exact is then too confident: a
+season that peaks four days from the prediction falls on nights the curve has
+given almost nothing. The predictive curve is the season curve **averaged over
+the uncertainty of its centre**: a normal error whose SD is the residual SD of
+the centre model in the training data, about
+`r sprintf("%.1f", sget(LOYO, "BioSIM", "catch", "logistic", TRUE, "sigma"))`
+days. This raises the log score for a new year from
+`r sprintf("%.3f", sget(LOYO, "BioSIM", "catch", "logistic", FALSE))` to
+`r sprintf("%.3f", sget(LOYO, "BioSIM", "catch", "logistic", TRUE))` with
+BioSIM, and is the largest single gain in the predictor.
+
+With that done, **BioSIM is the better driver** for nightly shares, for a new
+year (`r sprintf("%.3f", sget(LOYO, "BioSIM", "catch", "logistic", TRUE))`
+against `r sprintf("%.3f", sget(LOYO, "bayessbw", "catch", "logistic", TRUE))`)
+and for a new locality
+(`r sprintf("%.3f", sget(LOLO, "BioSIM", "catch", "logistic", TRUE))` against
+`r sprintf("%.3f", sget(LOLO, "bayessbw", "catch", "logistic", TRUE))`). This
+holds although bayessbw has the slightly smaller median error per locality-year
+(`r sprintf("%.2f", ceget("bayessbw", "mae"))` against
+`r sprintf("%.2f", ceget("BioSIM", "mae"))` days). The log score per moth
+weighs each season by its catch, and weighted that way the ranking reverses:
+BioSIM's median error is `r sprintf("%.2f", ceget("BioSIM", "mae_moth"))` days
+against `r sprintf("%.2f", ceget("bayessbw", "mae_moth"))` for bayessbw. BioSIM
+places the large seasons better, and those are where most of the moths are.
+
+## What the components are worth
+
+```{r}
+#| label: tbl-predictor-oracle
+#| tbl-cap: "Log score per moth for a new year (BioSIM, logistic, centre placed as if known) when one or both components are replaced by the observed value"
+spo |>
+  filter(driver == "BioSIM") |>
+  transmute(`Given the observed` = recode(oracle, none = "nothing (the predictor)",
+                                          width = "width", centre = "centre",
+                                          both = "centre and width"),
+            `Log score per moth` = sprintf("%.3f", log_score)) |>
+  kable(align = c("l", "r"))
+```
+
+Almost all the room for improvement is in the centre. Knowing the observed
+median catch date would raise the log score from
+`r sprintf("%.3f", oget("BioSIM", "none"))` to
+`r sprintf("%.3f", oget("BioSIM", "centre"))`; knowing the width as well adds
+only `r sprintf("%.3f", oget("BioSIM", "both") - oget("BioSIM", "centre"))`.
+Knowing the observed width *alone* makes the prediction worse
+(`r sprintf("%.3f", oget("BioSIM", "width"))`). When the centre is wrong, a
+true, narrow season concentrates the curve on the wrong nights, whereas the
+predicted width, drawn toward the average, hedges the miss.
+
+**The width model is unbiased.** Its mean error against the bias-corrected
+widths is `r sprintf("%+.2f", sget(LOYO, "BioSIM", "catch", "logistic", TRUE, "width_err_adj"))`
+days for a new year. Adding the predicted spread of pupation as a second
+covariate changes nothing, so the development models carry no information
+about season width beyond what the catch provides.
+
+**Shape matters little once the centre's uncertainty is averaged in.**
+
+```{r}
+#| label: tbl-predictor-shape
+#| tbl-cap: "Log score per moth by shape, BioSIM, centre averaged over its uncertainty"
+sps |>
+  filter(driver == "BioSIM", width_model == "catch", integrate) |>
+  select(scheme, shape, log_score) |>
+  tidyr::pivot_wider(names_from = scheme, values_from = log_score) |>
+  transmute(Shape = shape, `New year` = sprintf("%.3f", .data[[LOYO]]),
+            `New locality` = sprintf("%.3f", .data[[LOLO]])) |>
+  kable(align = c("l", "r", "r"))
+```
+
+The three shapes differ by less than 0.01. Placed as if the centre were known,
+the logistic clearly beat the normal, as the shape check of
+@sec-asym-decision predicted. Averaged over a four-to-five-day uncertainty in
+the centre, the differences in the tails no longer matter. The predictor uses
+the logistic, which matches the observed shape of the seasons themselves.
+
+## Held-out predictions
+
+```{r}
+#| label: fig-predictor-examples
+#| fig-cap: "Held-out predictions (BioSIM, new year: each season predicted from a model fitted without its year). Line: expected catch; points: observed catches, plus one on a log scale. The four seasons of at least 1,000 moths shown are those whose error in the median catch date is closest to the 25th, 50th, 75th and 90th percentiles of that error."
+#| fig-width: 9
+#| fig-height: 5.5
+ex <- sp$nights |>
+  group_by(flightID) |>
+  mutate(total = sum(moths), expected = share * total) |>
+  ungroup() |>
+  left_join(season |> select(flightID, locality, year, p50), by = "flightID")
+centre_err <- sp$nights |> distinct(flightID, mu) |>
+  left_join(season |> select(flightID, p50, season_total), by = "flightID") |>
+  filter(season_total >= 1000) |>
+  mutate(err = abs(mu - p50))
+pick <- sapply(stats::quantile(centre_err$err, c(0.25, 0.5, 0.75, 0.9)),
+               function(q) centre_err$flightID[which.min(abs(centre_err$err - q))])
+ex |>
+  filter(flightID %in% pick) |>
+  left_join(centre_err |> select(flightID, err), by = "flightID") |>
+  mutate(panel = sprintf("%s %d (median off by %.1f d)",
+                         sub(", Maine$", "", locality), year, err)) |>
+  ggplot(aes(doy)) +
+  geom_line(aes(y = expected + 1), colour = "black", linewidth = 0.6) +
+  geom_point(aes(y = moths + 1), colour = "grey40", size = 1.2) +
+  scale_y_log10(labels = scales::label_number(big.mark = ",")) +
+  facet_wrap(~ panel, scales = "free") +
+  labs(x = "Day of year", y = "Moths per night + 1") +
+  theme_minimal(base_size = 9) +
+  theme(panel.grid.minor = element_blank())
+```
+
+## Using the predictor
+
+`seasonal_dynamics/R/functions/predict_season.R` holds the model fitted on all
+`r sp$summary$n` locality-years:
+
+```r
+source("seasonal_dynamics/R/functions/predict_season.R")
+
+predict_season(
+  pup          = 176.2,   # predicted median pupation at the locality
+  pup_network  = 174.8,   # mean predicted median pupation over the network that year
+  season_total = 5000,    # moths caught over the season
+  nights_doy   = 180:215, # nights for which shares are wanted
+  driver       = "BioSIM"
+)
+```
+
+It returns each night's share of the season and its expected catch, with the
+predicted centre, width and centre uncertainty as attributes. It needs the
+network mean of predicted pupation for the year, because that carries most of
+the skill. It gives no interval for a single night's count, since the seasonal
+model has no term for nightly variability.
+
+
 # Next steps
 
-1. **A seasonal predictor**: a symmetric curve, logistic or heavier-tailed
-   (@sec-asym-decision), centred on the median catch date predicted from the
-   network mean of predicted pupation (@sec-median), with its width predicted
-   from the season total (@sec-width). Scored, like everything above, on new
-   years and new localities.
-2. **Temperature summaries per locality-year**, as an alternative driver to
-   the development models: degree-days and window means, at the trap and
-   averaged over the network.
+1. **A better centre.** The predictor's error is almost entirely in the median
+   catch date (@sec-predictor). Candidates: other summaries of the development
+   models (BioSIM emergence or flight rather than pupation), and temperature
+   summaries per locality-year (degree-days and window means, at the trap and
+   averaged over the network).
+2. **Nightly variability**, if prediction intervals for single nights are
+   wanted: a dispersion term on top of the seasonal curve.
