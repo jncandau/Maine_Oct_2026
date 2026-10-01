@@ -20,6 +20,16 @@ The working dataset comprised **227 trapping records at 49 localities over 22
 years** (43.60–47.44° N, 67.33–70.85° W), reshaped to one row per trap-night:
 5,612 counted nights and 154 missing.
 
+Missing nights were treated as censoring rather than as nights of unknown
+catch drawn from the whole season. Because flight is a seasonal curve, the
+position of a gap determines which part of that curve is unidentified: a
+missing night before 15 July bounds the rise of the season (left-censored) and
+one after it bounds the decline (right-censored). The side was recorded for
+every night, and the expected fraction of a season falling inside its censored
+nights was quantified with the fitted predictor (below), so that records whose
+percentiles are not identifiable at face value can be identified rather than
+treated as complete.
+
 Records were flagged rather than filtered, so that every subsequent table
 could report the population it referred to. `usable_phenology` (n = 187) marks
 records whose daily series is complete enough to describe a flight curve;

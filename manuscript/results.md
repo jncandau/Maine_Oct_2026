@@ -8,6 +8,21 @@ inside the trapping periods. Of these, 170 locality-years were both complete
 enough to describe a flight curve and long enough to bracket the modelled
 flight season, and all model comparison is on that set.
 
+The 154 missing nights were not randomly placed. They occur as blocks of
+dates repeated verbatim across localities hundreds of kilometres apart — a
+survey-wide servicing schedule rather than individual lost nights — of which
+124 were left-censored and 30 right-censored. Their cost is extremely skewed:
+the median affected record had 0.2% of its expected season inside censored
+nights, and only 4 of 15 assessable records exceeded 1%. One record,
+Elliotsville Township in 1978, had just two censored nights but they fell at
+the peak and carried an expected 32.6% of the season; completing them at their
+expected level moves its median catch date 1.1 days later and its p95 1.5 days
+earlier. Completing every affected record left both headline spatial
+quantities unchanged — median offset −1.76 days, observed gradient +0.490
+against +0.486 days per degree north — so censoring is a constraint on which
+individual records support a width or tail analysis, not a correction to the
+results below.
+
 Observed median catch dates ranged from day of year 177 to 206, with a median
 of 194.2. Flight was concentrated: the central 90% of a season's catch
 occupied a median of 10.6 days, and a median 34% of a season's catch fell on

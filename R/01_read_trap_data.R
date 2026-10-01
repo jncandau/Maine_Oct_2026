@@ -107,6 +107,12 @@ max_tail_share <- 0.05
 code_not_sampled <- "-"   # trap not operated / date not reported
 code_missing     <- "m"   # date sampled but value missing
 
+## Date (month-day) splitting a missing night into left- and right-censoring of
+## the flight curve. 15 July sits after the median catch date of every record
+## here but before the right tail closes, so it separates nights that bound the
+## rise of the season from nights that bound its decline.
+censor_cut_md <- "07-15"
+
 
 ## ---- 2. Read the Flight sheet ----------------------------------------------
 
@@ -221,8 +227,23 @@ trap_daily <- trap_long %>%
                    year, method, sex),
             by = "flightID") %>%
   mutate(date = as.Date(paste0(year, "-01-01")) + (doy - 1L)) %>%
+  ## A missing night is not an unknown quantity drawn from the whole season: it
+  ## censors one tail of the flight curve. Nights before `censor_cut` fall
+  ## before the flight of any record in this dataset is well under way, so
+  ## their unobserved catch belongs to the left tail; nights after it belong to
+  ## the right tail. The side is recorded here and used wherever a percentile
+  ## or a width is at stake; `NA` for nights that were counted.
+  mutate(
+    censor_cut = as.Date(paste0(year, "-", censor_cut_md)),
+    censoring  = case_when(
+      status != "missing" ~ NA_character_,
+      date < censor_cut   ~ "left",
+      date > censor_cut   ~ "right",
+      TRUE                ~ "on_cut"
+    )
+  ) %>%
   select(flightID, locality, latitude, longitude, year, date, doy,
-         moths, status, method, sex) %>%
+         moths, status, censoring, method, sex) %>%
   arrange(flightID, doy)
 
 
@@ -276,7 +297,14 @@ if (nrow(sex_split) > 0) {
       moths    = if (all(status == "counted") & n() == first(n_parts)) sum(moths) else NA_real_,
       .groups  = "drop"
     ) %>%
-    mutate(status = if_else(complete, "counted", "missing"), sex = "Male+Female") %>%
+    mutate(status = if_else(complete, "counted", "missing"), sex = "Male+Female",
+           ## A night that becomes "missing" through pooling censors the same
+           ## tail as an "m" night would at that date.
+           censoring = case_when(
+             status != "missing"                                 ~ NA_character_,
+             date < as.Date(paste0(year, "-", censor_cut_md))     ~ "left",
+             date > as.Date(paste0(year, "-", censor_cut_md))     ~ "right",
+             TRUE                                                ~ "on_cut")) %>%
     select(all_of(names(trap_daily)))
 
   trap_daily <- trap_daily %>%
@@ -317,6 +345,8 @@ effort <- trap_daily %>%
     last_doy    = max(doy),
     n_nights    = sum(status == "counted"),
     n_missing   = sum(status == "missing"),
+    n_cens_left  = sum(censoring == "left",  na.rm = TRUE),
+    n_cens_right = sum(censoring == "right", na.rm = TRUE),
     moths_total = sum(moths, na.rm = TRUE),
     .groups     = "drop"
   )

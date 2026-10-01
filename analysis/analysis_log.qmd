@@ -2588,6 +2588,119 @@ of the phenology.
   different input from the one it was calibrated on.
 
 
+# The missing nights are censoring {#sec-censor}
+
+```{r}
+#| label: censor-data
+cens      <- readRDS(file.path("data", "processed", "censoring_check.rds"))
+cens_rows <- cens$rows
+cs        <- cens$summary
+
+cget <- function(q, col) cs$headline[[col]][cs$headline$quantity == q]
+
+## Per-record lookups, so the text below carries no transcribed numbers.
+crow <- function(id, col) cens_rows[[col]][cens_rows$flightID == id]
+n_comparable <- sum(readRDS(file.path("data", "processed",
+                                      "model_vs_observed.rds"))$comparable)
+```
+
+An `m` night is not a night whose catch is unknown in the way a lottery number
+is unknown. It is a night inside a running trapping period whose catch was not
+recorded, and because flight is a seasonal curve, where the night falls decides
+which part of that curve is unidentified. `R/01_read_trap_data.R` therefore
+reads them as **censoring**: a missing night before 15 July bounds the rise of
+the season (left-censored), a missing night after it bounds the decline
+(right-censored). The side is carried on every night in `trap_daily$censoring`
+and counted per record in `n_cens_left` / `n_cens_right`.
+
+Of the `r cs$n_cens_nights` missing nights in the working dataset,
+`r cs$n_left` are left-censored and `r cs$n_right` right-censored, spread over
+`r cs$n_records` records.
+
+## The side is not the magnitude
+
+A censored night costs what the season was doing on it, and those two blocks
+of twelve mid-June nights in 1983 cost nothing at all — nothing was flying.
+`R/14_censoring.R` makes that quantitative: for each affected record the
+fitted predictor (@sec-predictor) is given the record's own night set, counted
+and censored together, and asked how much of the season it expects on the
+nights with no count. The percentiles are then re-estimated with those nights
+completed at their expected level, and the difference is the bias that
+treating a censored night as simply absent introduces.
+
+The distribution is extremely skewed. The median record has
+`r sprintf("%.2f%%", 100 * cs$median_share)` of its season inside censored
+nights; only `r cs$n_material` of `r cs$n_assessed` assessed records exceed
+`r sprintf("%.0f%%", 100 * cs$material_cut)`, and one reaches
+`r sprintf("%.0f%%", 100 * cs$max_share)`.
+
+```{r}
+#| label: tbl-censor
+#| tbl-cap: "The records where censoring is material: more than 1% of the season expected on nights with no count. `shift` is how far the percentile moves when the censored nights are completed at their expected level"
+cens_rows |>
+  filter(is_material) |>
+  transmute(Record = sub(", Maine$", "", locality), Year = year,
+            side, nights = n_cens_left + n_cens_right,
+            `DOY` = sprintf("%d-%d", cens_doy_lo, cens_doy_hi),
+            `season total` = season_total,
+            `censored` = sprintf("%.1f%%", 100 * cens_share),
+            `implied extra moths` = round(implied_extra),
+            `shift p50, d` = sprintf("%+.1f", d_p50),
+            `shift p95, d` = sprintf("%+.1f", d_p95)) |>
+  kable(align = c("l", "r", "l", "r", "r", "r", "r", "r", "r", "r"))
+```
+
+Elliotsville Township in 1978 is the case that matters. Only two nights are
+censored — 8 and 9 July — but they sit at the peak, and the predictor expects
+a third of the season on them. Completing them adds
+`r format(round(crow(509, "implied_extra")), big.mark = ",")`
+moths to a recorded `r format(crow(509, "season_total"), big.mark = ",")`,
+moves the median catch date `r sprintf("%+.1f", crow(509, "d_p50"))` days later
+and pulls p95 `r sprintf("%.1f", abs(crow(509, "d_p95")))` days earlier. Its observed curve is not a flight curve with a gap in it; it is
+a flight curve missing its peak. The record passes `usable_phenology` and
+`flight_complete` all the same, because neither flag looks at *where* a gap
+falls relative to the catch — a limitation of those flags, not of the record.
+
+The two right-censored 1983 records behave as expected for a gap in the
+declining tail: Hay Lake's p95 moves
+`r sprintf("%+.1f", crow(608, "d_p95"))` days with the
+median untouched. Steuben 1989 is the smallest season in the group
+(`r crow(735, "season_total")` moths) and its five late-June nights shift the
+median `r sprintf("%+.1f", crow(735, "d_p50"))` days.
+
+One record could not be assessed: Meddybemps Township in 1987 has no regional
+emergence curve, 1987 being one of the three years with no comparable
+locality-year.
+
+## The published aggregates do not move
+
+```{r}
+#| label: tbl-censor-headline
+#| tbl-cap: "The two headline spatial numbers, recomputed with every affected record's percentiles completed"
+cens$headline |>
+  transmute(Quantity = quantity,
+            `As published` = sprintf("%+.2f", published),
+            `Censoring completed` = sprintf("%+.2f", completed)) |>
+  kable(align = c("l", "r", "r"))
+```
+
+The median model-observation offset is unchanged at
+`r sprintf("%+.2f", cget("median offset, d", "completed"))` days and the
+observed latitudinal gradient moves from
+`r sprintf("%+.3f", cget("observed gradient, d per degree N", "published"))` to
+`r sprintf("%+.3f", cget("observed gradient, d per degree N", "completed"))`
+days per degree north. Four materially affected records out of
+`r n_comparable` cannot move a median, and the gradient conclusion of
+@sec-sync survives untouched.
+
+So the censoring rule changes no result reported here. What it changes is what
+may be done next: a record whose peak is censored should not contribute to a
+width or late-tail analysis at face value, and `censoring` now makes those
+records findable instead of leaving them indistinguishable from complete ones.
+The diagnostic is deliberately not a correction — nothing downstream reads the
+completed percentiles.
+
+
 # Findings so far {#sec-summary}
 
 ```{r}
