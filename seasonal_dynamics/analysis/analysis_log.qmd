@@ -885,6 +885,112 @@ ex |>
   theme(panel.grid.minor = element_blank())
 ```
 
+## A better centre {#sec-centre}
+
+```{r}
+#| label: centre-data
+co  <- readRDS(file.path("data", "processed", "seasonal", "centre_options.rds"))
+cos <- co$scores; coc <- co$coefs
+csget <- function(sp, sch, col) cos[[col]][cos$spec == sp & cos$scheme == sch]
+ccget <- function(sp, tm, col = "estimate") coc[[col]][coc$spec == sp & coc$term == tm]
+```
+
+Nearly all the predictor's error is in its centre (@sec-predictor).
+`seasonal_dynamics/R/08_centre_options.R` tries three alternatives to BioSIM
+pupation, each in the same split form (the network mean of the driver that
+year plus the locality's departure from it) and scored on the same
+`r co$summary$n` locality-years, both alone and inside the full predictor:
+
+- **BioSIM emergence**: the median date of adult emergence (`Emergence_mf`,
+  added to `R/03`);
+- **BioSIM flight**: the median of BioSIM's flight series;
+- **bayessbw pupation plus temperature**: the mean daily temperature at the
+  trap over the 14 or 21 days after the locality's predicted median pupation,
+  split like the driver into a network-mean and a local-departure term. This
+  is the temperature of the pupal and pre-flight period, which a pupation
+  date cannot know.
+
+```{r}
+#| label: tbl-centre-options
+#| tbl-cap: "Centre options. Log score per moth: the full predictor (width from the season total, logistic curve averaged over the centre's uncertainty). MAE: error of the predicted median catch date (days)"
+cos |>
+  tidyr::pivot_wider(id_cols = spec, names_from = scheme,
+                     values_from = c(log_score, mae, rmse)) |>
+  arrange(desc(`log_score_leave-one-year-out`)) |>
+  transmute(Centre = spec,
+            `Log score, new year` = sprintf("%.3f", `log_score_leave-one-year-out`),
+            `MAE, new year` = sprintf("%.2f", `mae_leave-one-year-out`),
+            `RMSE, new year` = sprintf("%.2f", `rmse_leave-one-year-out`),
+            `Log score, new locality` = sprintf("%.3f", `log_score_leave-one-locality-out`),
+            `MAE, new locality` = sprintf("%.2f", `mae_leave-one-locality-out`)) |>
+  kable(align = c("l", "r", "r", "r", "r", "r"))
+```
+
+**BioSIM flight is the best centre** by every measure. For a new year it cuts
+the median error from
+`r sprintf("%.2f", csget("BioSIM pupation", LOYO, "mae"))` to
+`r sprintf("%.2f", csget("BioSIM flight", LOYO, "mae"))` days and raises the
+log score from `r sprintf("%.3f", csget("BioSIM pupation", LOYO, "log_score"))`
+to `r sprintf("%.3f", csget("BioSIM flight", LOYO, "log_score"))`. For a new
+locality the figures are
+`r sprintf("%.2f", csget("BioSIM flight", LOLO, "mae"))` days and
+`r sprintf("%.3f", csget("BioSIM flight", LOLO, "log_score"))`. Emergence
+comes second, between flight and pupation.
+
+The ranking follows how close each driver is to the moment of flight. The
+year-level slope rises toward one along the same sequence: pupation
+`r sprintf("%.2f", ccget("BioSIM pupation", "biosim_pup_Y"))`, emergence
+`r sprintf("%.2f", ccget("BioSIM emergence", "biosim_emerg_Y"))`, flight
+`r sprintf("%.2f", ccget("BioSIM flight", "biosim_flight_Y"))`
+(`r sprintf("%.2f", ccget("BioSIM flight", "biosim_flight_Y", "lo"))` to
+`r sprintf("%.2f", ccget("BioSIM flight", "biosim_flight_Y", "hi"))`). Each
+step adds the part of BioSIM's biology, from pupation through the pupal stage
+and adult maturation to flight, that the catches confirm. The within-year
+slopes stay near 0.1 for every driver
+(`r sprintf("%.2f", ccget("BioSIM flight", "biosim_flight_W"))` for flight):
+none of them recovers the differences between localities of the same year.
+
+**Temperature after pupation helps bayessbw, but not enough.** Adding the
+post-pupation temperature to bayessbw raises its log score for a new year
+from `r sprintf("%.3f", csget("bayessbw pupation", LOYO, "log_score"))` to
+`r sprintf("%.3f", csget("bayessbw pupation + T14", LOYO, "log_score"))`
+(14 days) and `r sprintf("%.3f", csget("bayessbw pupation + T21", LOYO, "log_score"))`
+(21 days). That still falls short of BioSIM emergence, let alone flight. The
+temperature works through the year: a year warmer by 1 °C after pupation flies
+`r sprintf("%.1f", abs(ccget("bayessbw pupation + T14", "T14_Y")))` days
+earlier (`r sprintf("%.1f", ccget("bayessbw pupation + T14", "T14_Y", "lo"))`
+to `r sprintf("%.1f", ccget("bayessbw pupation + T14", "T14_Y", "hi"))`, 14-day
+window). A locality warmer than the others that year flies only
+`r sprintf("%.2f", abs(ccget("bayessbw pupation + T14", "T14_W")))` days
+earlier per degree
+(`r sprintf("%.2f", ccget("bayessbw pupation + T14", "T14_W", "lo"))` to
+`r sprintf("%.2f", ccget("bayessbw pupation + T14", "T14_W", "hi"))`). The
+local response is again the missing piece. BioSIM, which simulates the pupal
+stage and adult maturation explicitly, already does better with that
+temperature than an empirical correction added to bayessbw.
+
+```{r}
+#| label: fig-centre-options
+#| fig-cap: "Centre options for the seasonal predictor: log score per moth (left, higher is better) and error of the predicted median catch date (right), for a new year and a new locality."
+#| fig-width: 9
+#| fig-height: 3.2
+lvl <- cos |> filter(scheme == LOYO) |> arrange(log_score) |> pull(spec)
+cd <- cos |> mutate(spec = factor(spec, lvl),
+                    scheme = recode(scheme, `leave-one-year-out` = "new year",
+                                    `leave-one-locality-out` = "new locality"))
+p1 <- ggplot(cd, aes(log_score, spec, shape = scheme)) +
+  geom_point(size = 2) + scale_shape_manual(values = c(16, 1), name = NULL) +
+  labs(x = "Log score per moth", y = NULL) +
+  theme_minimal(base_size = 10) + theme(panel.grid.minor = element_blank(),
+                                        legend.position = "none")
+p2 <- ggplot(cd, aes(mae, spec, shape = scheme)) +
+  geom_point(size = 2) + scale_shape_manual(values = c(16, 1), name = NULL) +
+  labs(x = "Error of the median catch date (days)", y = NULL) +
+  theme_minimal(base_size = 10) + theme(panel.grid.minor = element_blank(),
+                                        axis.text.y = element_blank())
+p1 + p2
+```
+
 ## Using the predictor
 
 `seasonal_dynamics/R/functions/predict_season.R` holds the model fitted on all
@@ -911,10 +1017,11 @@ model has no term for nightly variability.
 
 # Next steps
 
-1. **A better centre.** The predictor's error is almost entirely in the median
-   catch date (@sec-predictor). Candidates: other summaries of the development
-   models (BioSIM emergence or flight rather than pupation), and temperature
-   summaries per locality-year (degree-days and window means, at the trap and
-   averaged over the network).
-2. **Nightly variability**, if prediction intervals for single nights are
+1. **Adopt BioSIM flight as the centre** of the predictor (@sec-centre), and
+   refit `predict_season()` on it.
+2. **The local component.** Every driver tried recovers the differences
+   between years and almost none of the differences between localities of the
+   same year (within-year slopes near 0.1). That, not the year signal, is
+   where the remaining error lies.
+3. **Nightly variability**, if prediction intervals for single nights are
    wanted: a dispersion term on top of the seasonal curve.

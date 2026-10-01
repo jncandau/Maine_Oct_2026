@@ -34,7 +34,8 @@
 #     Pupae_mf  = MalePupae  + FemalePupae    (stock: pupae present that day)
 #     Adult_mf  = MaleAdult  + FemaleAdult    (stock: adults present that day)
 #     Flight_mf = MaleFlight + FemaleFlight   (activity: flight that day)
-#   and one derived series:
+#   plus Emergence_mf = MaleEmergence + FemaleEmergence (flux: adults
+#   emerging that day), and one derived series:
 #     Pupation_mf  pupation-date distribution (flux: entries into the pupal
 #                  stage that day), recovered by mass balance. With mortality
 #                  off an individual that has pupated by day t is still a pupa
@@ -292,7 +293,10 @@ biosim_daily <- biosim_raw %>%
   arrange(KeyID, Year, doy) %>%
   group_by(KeyID, Year) %>%
   mutate(cum_pupation = Pupae_mf + cumsum(MaleEmergence + FemaleEmergence),
-         Pupation_mf  = pmax(c(cum_pupation[1], diff(cum_pupation)), 0)) %>%
+         Pupation_mf  = pmax(c(cum_pupation[1], diff(cum_pupation)), 0),
+         ## Adult emergence, a flux reported by the model (sums to 100% of
+         ## the cohort with mortality off).
+         Emergence_mf = MaleEmergence + FemaleEmergence) %>%
   ungroup() %>%
   select(-cum_pupation) %>%
   ## inner_join: the raw cache can hold locality-years that R/01 has since
@@ -336,7 +340,7 @@ source(file.path("R", "functions", "phenology.R"))
 p_names <- sprintf("p%02d", round(probs * 100))
 
 ## The derived pupation series is summarised alongside the three model series.
-pct_series <- c(pheno_series, "Pupation_mf")
+pct_series <- c(pheno_series, "Pupation_mf", "Emergence_mf")
 
 biosim_phenology <- biosim_daily %>%
   filter(doy %in% keep_doy) %>%

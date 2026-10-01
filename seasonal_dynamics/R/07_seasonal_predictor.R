@@ -55,6 +55,8 @@
 
 library(dplyr)
 
+source(file.path("seasonal_dynamics", "R", "functions", "seasonal_curve.R"))
+
 out_dir <- file.path("data", "processed", "seasonal")
 eps     <- 0.001
 
@@ -84,32 +86,9 @@ stopifnot(!any(is.na(dat$width90_adj)), !any(is.na(dat$pup_width)))
 
 
 ## ---- 2. Curves --------------------------------------------------------------------
-## Each shape: a cumulative distribution with median mu, scaled so that
-## F(mu + w/2) - F(mu - w/2) = 0.90.
+## Shapes and nightly shares: seasonal_dynamics/R/functions/seasonal_curve.R.
 
-shapes <- list(
-  normal   = function(x, mu, w) stats::pnorm(x, mu, w / (2 * stats::qnorm(0.95))),
-  logistic = function(x, mu, w) stats::plogis(x, mu, w / (2 * stats::qlogis(0.95))),
-  laplace  = function(x, mu, w) {
-    b <- w / (2 * log(10))
-    ifelse(x < mu, 0.5 * exp((x - mu) / b), 1 - 0.5 * exp(-(x - mu) / b))
-  }
-)
-
-## Grid for averaging over the centre error: standard-normal points and
-## weights.
-z_grid <- seq(-3, 3, by = 0.25)
-z_wt   <- stats::dnorm(z_grid) / sum(stats::dnorm(z_grid))
-
-night_shares <- function(doy, mu, w, shape, sigma = 0) {
-  one <- function(m) shapes[[shape]](doy, m, w) - shapes[[shape]](doy - 1, m, w)
-  s <- if (sigma > 0) {
-    Reduce(`+`, Map(function(z, wt) wt * one(mu + sigma * z), z_grid, z_wt))
-  } else one(mu)
-  s <- s / sum(s)
-  s <- (1 - eps) * s + eps / length(s)
-  s / sum(s)
-}
+shapes <- season_shapes
 
 
 ## ---- 3. Component models ------------------------------------------------------------
@@ -141,7 +120,8 @@ score_nights <- function(pred, shape, integrate) {
     inner_join(nights, by = "flightID", relationship = "one-to-many") %>%
     group_by(flightID) %>%
     mutate(share = night_shares(doy, first(mu), first(w), shape,
-                                sigma = if (integrate) first(sigma) else 0)) %>%
+                                sigma = if (integrate) first(sigma) else 0,
+                                eps = eps)) %>%
     ungroup()
 }
 
