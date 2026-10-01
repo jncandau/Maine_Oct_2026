@@ -1061,9 +1061,10 @@ predict_season(
 It returns each night's share of the season and its expected catch, with the
 predicted centre, width and centre uncertainty as attributes. It needs the
 network mean of the driver for the year, because that carries most of the
-skill. It gives no interval for a single night's count, since the seasonal
-model has no term for nightly variability. The pupation drivers remain
-available through `driver = "BioSIM pupation"` or `"bayessbw pupation"`.
+skill. With `interval = "nightly"` it also returns a prediction interval for a
+single night's count, from the dispersion term of @sec-dispersion. The
+pupation drivers remain available through `driver = "BioSIM pupation"` or
+`"bayessbw pupation"`.
 
 # The local component {#sec-local}
 
@@ -1298,10 +1299,138 @@ with the results so far:
   locality's early catches track the regional flight rather than its own
   development.
 
+# Nightly dispersion {#sec-dispersion}
+
+```{r}
+#| label: dispersion-data
+nd  <- readRDS(file.path("data", "processed", "seasonal", "nightly_dispersion.rds"))
+nds <- nd$summary
+```
+
+Everywhere above that a season's nights were resampled (@sec-width,
+@sec-asym, @sec-asym-mech), moths were drawn as if independent of one
+another, i.e. a night's count as Binomial(season total, predicted share). The
+*Daily dynamics* analysis found actual nights far more variable than that
+(an NB2 fit around its own nightly mean curve, `daily_dynamics/R/11_count_distribution.R`).
+This section asks the same question of the predictor of @sec-predictor and
+@sec-centre: around the *predicted* share of a night, not its observed one.
+
+`seasonal_dynamics/R/10_nightly_dispersion.R` treats a night's count as
+Beta-Binomial(season total, predicted share, θ), the natural two-parameter
+family whose variance is
+
+$$\mathrm{Var}(Y_d) = n\,p_d(1-p_d)\,\frac{n+\theta}{1+\theta}$$
+
+the multinomial variance as θ &rarr; &infin;, inflated as it falls. It is the
+Dirichlet-multinomial seen one night at a time, so a season's nights still
+sum to its observed total. θ is fitted by maximum likelihood, as the only
+free parameter, against the predicted share already scored in @sec-predictor:
+the leave-one-year-out prediction of the adopted predictor (BioSIM flight
+centre, @sec-centre), i.e. the share a user of `predict_season()` would
+actually be holding, not an in-sample fit.
+
+```{r}
+#| label: tbl-dispersion-fit
+#| tbl-cap: "A night's count around its predicted share: multinomial (independence) against beta-binomial, `r nds$n_nights` nights over `r nds$n_seasons` locality-years"
+tibble::tibble(
+  Model = c("Multinomial (independence)", "Beta-binomial"),
+  theta = c("Inf (fixed)", sprintf("%.2f", nds$theta)),
+  `RMS standardised residual` = sprintf("%.2f", c(nds$rmse_z_mult_pooled, nds$rmse_z_bb_pooled))
+) |>
+  kable(align = c("l", "r", "r"), col.names = c("Model", "\u03B8", "RMS standardised residual"))
+```
+
+The fitted dispersion is θ = `r sprintf("%.2f", nds$theta)`. A
+likelihood-ratio test against the multinomial (θ fixed at infinity) is
+decisive (`r sprintf("%.0f", nds$lrt_stat)` on 1 df,
+p `r if (nds$lrt_p < 1e-10) "< 1e-10" else sprintf("= %.2g", nds$lrt_p)`), and
+the standardised residual of a night's count -- which should average to 1 if
+the model is scaled correctly -- falls from
+`r sprintf("%.1f", nds$rmse_z_mult_pooled)` under the multinomial to
+`r sprintf("%.2f", nds$rmse_z_bb_pooled)` under the beta-binomial. Treating
+moths as independent draws understates a night's variability by roughly this
+factor.
+
+```{r}
+#| label: tbl-dispersion-vif
+#| tbl-cap: "Variance inflation of a night's count relative to the multinomial, (n + theta) / (1 + theta), at a few season sizes"
+nds$vif_table |>
+  transmute(`Season total` = scales::label_comma()(season_total),
+            `SD inflation (x multinomial)` = sprintf("%.1f", sd_inflation)) |>
+  kable(align = c("r", "r"))
+```
+
+The inflation grows with the season total, not against it: a bigger season
+is not counted more precisely night to night, because the extra moths are
+not independent of each other. At a season of 1,000 moths a night's realistic
+SD is about `r sprintf("%.0f", nds$vif_table$sd_inflation[nds$vif_table$season_total == 1000])`
+times the multinomial's.
+
+```{r}
+#| label: fig-dispersion-example
+#| fig-cap: "The adopted predictor's curve (black) with a 90% nightly interval (beta-binomial, theta as fitted above, Monte Carlo quantiles), against observed catches (grey points), for the same held-out seasons as fig-predictor-examples"
+#| fig-width: 9
+#| fig-height: 5.5
+set.seed(2026)
+bb_interval <- function(n, p, theta, level = 0.90, nsim = 4000) {
+  alo <- (1 - level) / 2
+  m <- vapply(p, function(pp) {
+    draws <- stats::rbinom(nsim, size = n,
+                           prob = stats::rbeta(nsim, theta * pp, theta * (1 - pp)))
+    stats::quantile(draws, c(alo, 1 - alo), names = FALSE)
+  }, numeric(2))
+  list(lwr = m[1, ], upr = m[2, ])
+}
+disp_ex <- ex |>
+  filter(flightID %in% pick) |>
+  left_join(centre_err |> select(flightID, err), by = "flightID") |>
+  mutate(panel = sprintf("%s %d (median off by %.1f d)",
+                         sub(", Maine$", "", locality), year, err))
+bnd <- disp_ex |>
+  group_by(flightID) |>
+  reframe(doy = doy, bb_interval(first(total), share, nd$theta) |> as.data.frame())
+disp_ex <- disp_ex |> left_join(bnd, by = c("flightID", "doy"))
+ggplot(disp_ex, aes(doy)) +
+  geom_ribbon(aes(ymin = lwr + 1, ymax = upr + 1), alpha = 0.15) +
+  geom_line(aes(y = expected + 1), colour = "black", linewidth = 0.6) +
+  geom_point(aes(y = moths + 1), colour = "grey40", size = 1.2) +
+  scale_y_log10(labels = scales::label_number(big.mark = ",")) +
+  facet_wrap(~ panel, scales = "free") +
+  labs(x = "Day of year", y = "Moths per night + 1") +
+  theme_minimal(base_size = 9) + theme(panel.grid.minor = element_blank())
+```
+
+The band is wide, and mostly for a mundane reason: it is built from the
+*predicted* centre, so a season whose observed median misses the prediction
+(the usual case, @sec-adopted) sits off-centre inside it rather than outside
+it. θ buys back some of the honesty that assuming independence would have
+borrowed: holding `predict_season()` to the narrower, multinomial width would
+understate how far a single night's count can reasonably land around the
+curve's expectation.
+
+`predict_season()` (@sec-adopted) now takes `interval = "nightly"`, returning
+`sd`, `lwr` and `upr` for a single night from this model. Nights are **not**
+independent of each other under it -- they are one draw from a
+Dirichlet-multinomial season -- so summing the per-night intervals overstates
+the uncertainty of a multi-night total; nothing here gives that joint
+interval.
+
+This leaves the asymmetry question of @sec-asym-mech open rather than
+settled: the resampling there also treated moths as independent, and with θ
+this small, a run of nights sharing a warm spell could produce apparent skew
+that a wider null would absorb. Revisiting @sec-asym-mech with this
+dispersion, rather than the multinomial, is unfinished.
+
 # Next steps
 
 1. **The origin of the local component** (@sec-local), if it matters for the
    use of the predictor: station temperatures near the traps, or the nightly
    series, to tell temperature at the wrong scale from moth movement.
-2. **Nightly variability**, if prediction intervals for single nights are
-   wanted: a dispersion term on top of the seasonal curve.
+2. ~~**Nightly variability**, if prediction intervals for single nights are
+   wanted: a dispersion term on top of the seasonal curve.~~ Done
+   (@sec-dispersion): a beta-binomial term, fitted on the predictor's own
+   held-out predictions. The resampling used earlier in this analysis
+   (@sec-width, @sec-asym, @sec-asym-mech) treats moths as independent draws;
+   this section shows that nights are considerably more variable than that,
+   consistent with the Daily dynamics analysis's NB2 fit
+   (`daily_dynamics/R/11_count_distribution.R`).
