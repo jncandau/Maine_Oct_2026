@@ -540,8 +540,8 @@ pb <- ggplot(a_within, aes(d, kelly)) +
 pa + pb
 ```
 
-Two readings fit a within-year pattern, and they are where step 3 should
-start.
+Two readings fit a within-year pattern, and step 3 (@sec-asym-mech) tests
+them.
 
 - **A common end to the season.** If flight ends at about the same time
   everywhere in a year, for example at the first cool spell, a locality that
@@ -560,11 +560,125 @@ is synchronous with the peak elsewhere. Both are testable with the data in
 hand.
 
 
+## Step 3: which part of the season is shared? {#sec-asym-mech}
+
+```{r}
+#| label: asym-mech-data
+amc <- readRDS(file.path("data", "processed", "seasonal", "asymmetry_mechanisms.rds"))
+asp <- amc$spread; asl <- amc$slopes; acn <- amc$contrasts
+spget <- function(qq, col) asp[[col]][as.character(asp$q) == qq]
+slget <- function(qq, col) asl[[col]][as.character(asl$q) == qq]
+cnget <- function(qty, col) acn[[col]][acn$quantity == qty]
+## Habitual lateness of localities with at least three years, for the text.
+loc_late <- amc$data |> filter(q == "p50") |> group_by(locality) |>
+  summarise(late = mean(dep), n = n(), .groups = "drop") |> filter(n >= 3) |>
+  left_join(season |> distinct(locality, latitude, longitude), by = "locality")
+geo_r2 <- summary(lm(late ~ latitude + longitude, loc_late))$r.squared
+```
+
+The two readings of @sec-asym, and the null, disagree about **which part of
+the season** is shared among the localities of a year.
+
+| Hypothesis | Spread among localities, by percentile | How each percentile follows a locality's lateness |
+|---|---|---|
+| Pure shift | the same at every percentile | the same at every percentile |
+| Common end | smaller in the late tail | weaker in the late tail |
+| Regional mixing | smaller in both tails | weaker in both tails |
+
+: What each explanation predicts {#tbl-asym-hyp}
+
+`seasonal_dynamics/R/06_asymmetry_mechanisms.R` measures both profiles over
+`r amc$summary$n` locality-years in `r amc$summary$n_years` years. The spread
+is the pooled within-year standard deviation of each percentile, corrected for
+sampling error with the same resampling as above, since tail percentiles rest
+on fewer moths and would otherwise look more variable. A locality's
+**lateness** is its mean departure of the median catch date from its year's
+mean, taken over its *other* years; that way it shares no sampling error with
+the season it is used to explain. Both profiles are scaled to the median, and
+their intervals come from a bootstrap over years.
+
+```{r}
+#| label: fig-asym-mech
+#| fig-cap: "Left: spread of each percentile among the localities of a year, relative to the spread of the median (sampling error removed). Right: how strongly each percentile follows the locality's lateness in its other years, relative to the median. Bars: 95% bootstrap intervals over years. Dashed line: pure shift."
+#| fig-width: 9
+#| fig-height: 3.6
+pq <- function(d, y, lo, hi, ylab) {
+  ggplot(d, aes(q, .data[[y]], group = 1)) +
+    geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50") +
+    geom_linerange(aes(ymin = .data[[lo]], ymax = .data[[hi]]), colour = "grey55") +
+    geom_line(colour = "black") + geom_point(colour = "black", size = 1.8) +
+    labs(x = "Percentile of the season's catch", y = ylab) +
+    theme_minimal(base_size = 10) + theme(panel.grid.minor = element_blank())
+}
+pq(asp, "rel_corr", "rel_corr_lo", "rel_corr_hi", "Spread relative to the median") +
+  pq(asl, "rel_slope", "rel_lo", "rel_hi", "Slope relative to the median") +
+  coord_cartesian(ylim = c(0, 2.5))
+```
+
+**No part of the season is pinned to a common date.** Every percentile
+varies about equally among the localities of a year: relative to the median,
+the spread is `r sprintf("%.2f", cnget("spread, early tail / median", "estimate"))`
+in the early tail
+(`r sprintf("%.2f", cnget("spread, early tail / median", "lo"))` to
+`r sprintf("%.2f", cnget("spread, early tail / median", "hi"))`) and
+`r sprintf("%.2f", cnget("spread, late tail / median", "estimate"))` in the
+late tail (`r sprintf("%.2f", cnget("spread, late tail / median", "lo"))` to
+`r sprintf("%.2f", cnget("spread, late tail / median", "hi"))`). A common end
+date would have shrunk the late tail; regional mixing would have shrunk both.
+Neither happens.
+
+**But lateness is lopsided.** A locality that is habitually late is late in
+its median and in its decline by the full amount: the late tail follows its
+lateness at `r sprintf("%.2f", cnget("slope, late tail / median", "estimate"))`
+times the median's slope. Its early tail follows at only
+`r sprintf("%.2f", cnget("slope, early tail / median", "estimate"))` times
+(`r sprintf("%.2f", cnget("slope, early tail / median", "lo"))` to
+`r sprintf("%.2f", cnget("slope, early tail / median", "hi"))`), and the
+difference,
+`r sprintf("%+.2f", cnget("slope, late minus early", "estimate"))`
+(`r sprintf("%+.2f", cnget("slope, late minus early", "lo"))` to
+`r sprintf("%+.2f", cnget("slope, late minus early", "hi"))`), excludes zero.
+Habitually late localities start nearly as early as the others, then peak and
+finish late. This is a **common start** for the persistent part of lateness,
+the mirror image of the common-end hypothesis, and it produces the long rise
+of late localities found in @sec-asym.
+
+The two results are compatible. Habitual lateness is only part of a
+locality's departure in a given year: the slope of the median on lateness is
+`r sprintf("%.2f", slget("p50", "slope"))`
+(`r sprintf("%.2f", slget("p50", "slope_lo"))` to
+`r sprintf("%.2f", slget("p50", "slope_hi"))`). The remainder, which is
+specific to the year, moves the whole season and keeps the spread profile flat.
+
+What this rules out, and what it leaves:
+
+- **A regional end to flight is ruled out.** Late tails are not shared and
+  follow each locality's own timing fully.
+- **Symmetric regional mixing is ruled out.** The late tails of early
+  localities are not pulled toward the regional dates.
+- **Left standing: an early fraction of the catch at late localities that
+  flies on the regional schedule.** It could be moths arriving from earlier
+  areas before the local population emerges, which would be dispersal in one
+  direction only. It could equally be local heterogeneity: warm pockets around
+  a cool site that emerge with the rest of the region.
+
+Geography does not separate the two here. Habitual lateness is barely related
+to latitude and longitude (R^2^ = `r sprintf("%.2f", geo_r2)` over
+`r nrow(loc_late)` localities with at least three years). The two most
+habitually early localities, Greenbush and Passadumkeag, are neighbours in the
+Penobscot valley, and the late ones are scattered across the state. A
+dispersal source would have to be identified from the timing of the early
+catches themselves, night by night, which is a question for the daily
+analysis.
+
+
 # Next steps
 
-1. **Asymmetry, step 3**: test the two within-year readings of @sec-asym --
-   a common end date to the season, against moths arriving from elsewhere --
-   and only then decide what to model.
+1. **Asymmetry, the early fraction at late localities** (@sec-asym-mech):
+   whether the first moths caught at a habitually late locality fly on the
+   same nights as the peak elsewhere (arrivals) or follow local temperature
+   (warm pockets). This needs the nightly series and belongs with the daily
+   analysis.
 2. **Temperature summaries per locality-year**, as an alternative driver to
    the development models: degree-days and window means, at the trap and
    averaged over the network.
