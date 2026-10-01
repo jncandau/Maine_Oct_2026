@@ -26,22 +26,23 @@ of 194.0. Flight was concentrated: the central 90% of a season's catch
 occupied a median of 10.9 days, and a median 34% of a season's catch fell on
 the single peak night.
 
-## The two developmental models agree with each other
+## The two developmental models agree on the pattern, not the date
 
 BioSIM and bayessbw were run independently, on different weather (BioSIM's own
 generated series against the CaSR reanalysis) and from different biology (a
 full seasonal model against a hierarchical development-rate model of the
-larval instars). Their predicted pupation dates nevertheless agreed closely:
-BioSIM was later by a mean of 0.7 days, with a correlation of 0.78 across the
-203 locality-years. In the bayessbw simulations, within-population variation
+larval instars). Their predicted pupation dates ranked the 203 locality-years
+alike (r = 0.77), but BioSIM pupated earlier, by a mean of 4.3 days (median
+4.0). In the bayessbw simulations, within-population variation
 exceeded posterior parameter uncertainty about fourfold — a population took a
 median 9.0 days to pupate from its 5th to its 95th percentile, while the
 posterior placed that population's median date to within 2.0 days.
 
-Both models also sat the same distance from the catches. The constant lag
-from predicted pupation to observed median catch that minimised the residual
-error was 13.4 days, and the two models required lags within a day of each
-other.
+The constant lag from predicted pupation to observed median catch was
+correspondingly different: a median 13.4 days for bayessbw and 17.5 days for
+BioSIM. The four-day gap is the models' disagreement on the pupation date
+itself; the spread of the interval around its median was the same for both
+(sd 6.6 and 6.7 days).
 
 ## Modelled flight is early, and the error is in the spatial gradient
 

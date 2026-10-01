@@ -34,6 +34,17 @@
 #     Pupae_mf  = MalePupae  + FemalePupae    (stock: pupae present that day)
 #     Adult_mf  = MaleAdult  + FemaleAdult    (stock: adults present that day)
 #     Flight_mf = MaleFlight + FemaleFlight   (activity: flight that day)
+#   and one derived series:
+#     Pupation_mf  pupation-date distribution (flux: entries into the pupal
+#                  stage that day), recovered by mass balance. With mortality
+#                  off an individual that has pupated by day t is still a pupa
+#                  or has emerged, so cumulative pupation = Pupae_mf +
+#                  cumulative (MaleEmergence + FemaleEmergence), and its daily
+#                  positive increments are the distribution. The median of the
+#                  Pupae_mf STOCK is NOT the median pupation date: it is the
+#                  middle of the pupal period, about five days later. In a few
+#                  incomplete cohorts BioSIM's pupae vanish without emerging;
+#                  those days give a negative increment, which is dropped.
 #   Only Flight is a daily flux, so its cumulative curve is a true
 #   distribution; the two stocks are kept for comparison (see section 5).
 #   MaleEmergence / FemaleEmergence are also in the output and are a flux too,
@@ -272,11 +283,22 @@ biosim_daily <- biosim_raw %>%
          Adult_mf  = MaleAdult  + FemaleAdult,
          Flight_mf = MaleFlight + FemaleFlight) %>%
   group_by(KeyID, Year, doy, date) %>%
-  summarise(across(all_of(c(pheno_series, "Pupae", "Adults", unlist(sex_pairs))),
+  summarise(across(all_of(c(pheno_series, "Pupae", "Adults", unlist(sex_pairs),
+                            "MaleEmergence", "FemaleEmergence")),
                    ~ mean(.x, na.rm = TRUE)),
             n_runs = n_distinct(run), .groups = "drop") %>%
-  left_join(select(locality_years, KeyID, Year, Location, Latitude, Longitude),
-            by = c("KeyID", "Year")) %>%
+  ## Pupation dates by mass balance (see the header); computed on the
+  ## run-averaged series, over the whole simulated year.
+  arrange(KeyID, Year, doy) %>%
+  group_by(KeyID, Year) %>%
+  mutate(cum_pupation = Pupae_mf + cumsum(MaleEmergence + FemaleEmergence),
+         Pupation_mf  = pmax(c(cum_pupation[1], diff(cum_pupation)), 0)) %>%
+  ungroup() %>%
+  select(-cum_pupation) %>%
+  ## inner_join: the raw cache can hold locality-years that R/01 has since
+  ## excluded (Elliotsville Township 1978); only current records are kept.
+  inner_join(select(locality_years, KeyID, Year, Location, Latitude, Longitude),
+             by = c("KeyID", "Year")) %>%
   relocate(Location, Year, doy, date) %>%
   arrange(Location, Year, doy)
 
@@ -313,11 +335,14 @@ source(file.path("R", "functions", "phenology.R"))
 ## Names of the percentile columns, e.g. p05 ... p95.
 p_names <- sprintf("p%02d", round(probs * 100))
 
+## The derived pupation series is summarised alongside the three model series.
+pct_series <- c(pheno_series, "Pupation_mf")
+
 biosim_phenology <- biosim_daily %>%
   filter(doy %in% keep_doy) %>%
   select(Location, Year, KeyID, Latitude, Longitude, doy, n_runs,
-         all_of(pheno_series)) %>%
-  pivot_longer(all_of(pheno_series), names_to = "series", values_to = "value") %>%
+         all_of(pct_series)) %>%
+  pivot_longer(all_of(pct_series), names_to = "series", values_to = "value") %>%
   group_by(Location, Year, KeyID, Latitude, Longitude, series) %>%
   summarise(
     n_runs     = max(n_runs),
@@ -329,7 +354,7 @@ biosim_phenology <- biosim_daily %>%
   ) %>%
   mutate(duration = .data[[p_names[length(p_names)]]] - .data[[p_names[1]]]) %>%
   relocate(series, .after = Year) %>%
-  arrange(Location, Year, match(series, pheno_series))
+  arrange(Location, Year, match(series, pct_series))
 
 ## Wide view of the flight series alone, for joining to the trap percentiles.
 ## `flight_complete` marks the locality-years whose curve covers essentially
@@ -337,7 +362,7 @@ biosim_phenology <- biosim_daily %>%
 ## fraction that completed development (see `min_flight_pct` above for what
 ## that does, and does not, imply about their timing).
 ## Completeness is a property of the locality-year, not of one series, so the
-## flag is attached to all three rows -- a pupal or adult curve from a cohort
+## flag is attached to every row -- a pupal or adult curve from a cohort
 ## that never finished flying is just as partial.
 flight_completeness <- biosim_phenology %>%
   filter(series == "Flight_mf") %>%

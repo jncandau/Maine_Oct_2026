@@ -605,20 +605,27 @@ by weather alone and are not anchored on any field observation of development.
 The output is daily and everything is a **percentage of the simulated cohort**,
 quantised in steps of 0.25%. Besides the eight stages (`L2o` … `Adults`) it
 reports emergence, flight, oviposition and death, separately for each sex.
-Three quantities are kept, each the sum of the two sexes:
+Three quantities are kept, each the sum of the two sexes, and a fourth is
+derived from them:
 
 | Series | Definition | Kind |
 |--------|------------|------|
 | `Pupae_mf` | `MalePupae` + `FemalePupae` | stock: percentage present that day |
 | `Adult_mf` | `MaleAdult` + `FemaleAdult` | stock: percentage present that day |
 | `Flight_mf` | `MaleFlight` + `FemaleFlight` | activity: flight that day |
+| `Pupation_mf` | daily increase of `Pupae_mf` + cumulative (`MaleEmergence` + `FemaleEmergence`) | flux: entries into the pupal stage that day |
 
 : Series retained from the model output {#tbl-biosim-series}
 
-Only flight is a daily flux, so only its cumulative curve is a genuine
-distribution over the season — and it is the series to compare with trap
-catches. The two stocks are weighted by how long individuals remain in the
-stage and are kept for context. The sex-specific columns reproduce the
+Flight and pupation are daily fluxes, so their cumulative curves are genuine
+distributions over the season; flight is the series to compare with trap
+catches, pupation the one to compare with bayessbw. BioSIM does not report
+pupation directly. With mortality off, an individual that has pupated by a
+given day is either still a pupa or has already emerged, so cumulative
+pupation is the pupae present plus the cumulative emergence, and its daily
+increments are the pupation dates. The two stocks are weighted by how long
+individuals remain in the stage and are kept for context: the median of the
+pupal stock is the middle of the pupal period, not the date of pupation. The sex-specific columns reproduce the
 both-sexes columns the model also reports exactly, which is checked at every
 run.
 
@@ -819,13 +826,22 @@ from p05 to p95. Individual variation, not parameter uncertainty, dominates.
 ```{r}
 #| label: tbl-pupal-vs-biosim
 #| tbl-cap: "Predicted pupation, bayessbw against BioSIM"
+## BioSIM's pupation dates are the derived `Pupation_mf` series. Versions of
+## this log before 2026-10-01 used the median of the `Pupae_mf` stock here,
+## which falls in the middle of the pupal period, about five days later.
 biosim_pupae <- biosim_phenology |>
-  filter(series == "Pupae_mf") |>
+  filter(series == "Pupation_mf") |>
   select(Location, Year, biosim_p50 = p50)
+biosim_stock <- biosim_phenology |>
+  filter(series == "Pupae_mf") |>
+  select(Location, Year, stock_p50 = p50)
 
-pupal_phenology |>
+pup_cmp <- pupal_phenology |>
   select(Location, Year, bayes_p50 = p50) |>
   inner_join(biosim_pupae, by = c("Location", "Year")) |>
+  inner_join(biosim_stock, by = c("Location", "Year"))
+
+pup_cmp |>
   summarise(
     `locality-years` = n(),
     `bayessbw p50, mean` = round(mean(bayes_p50), 1),
@@ -839,10 +855,21 @@ pupal_phenology |>
 ```
 
 The two models were built from different data, fitted by different methods and
-driven by different weather, and they place pupation within a day of each
-other on average. Their disagreement at individual locality-years reaches two
-weeks in both directions, which is the more useful number: it is the scale at
-which either model's site-level prediction should be trusted.
+driven by different weather. They agree on the *pattern* of pupation across
+locality-years (r = `r sprintf("%.2f", cor(pup_cmp$bayes_p50, pup_cmp$biosim_p50))`)
+but not on its date: BioSIM pupates a median
+`r sprintf("%.1f", median(pup_cmp$bayes_p50 - pup_cmp$biosim_p50))` days
+earlier than bayessbw. Their disagreement at individual locality-years reaches
+two weeks in both directions, which is the scale at which either model's
+site-level prediction should be trusted.
+
+**Correction (1 October 2026).** Earlier versions of this log compared
+bayessbw with the median of BioSIM's pupal *stock* and found the two within a
+day of each other. That median falls a median
+`r sprintf("%.1f", median(pup_cmp$stock_p50 - pup_cmp$biosim_p50))` days after
+BioSIM's median pupation date, because a pupa is counted on every day it
+spends in the stage. The near-agreement was the pupal period offsetting the
+models' real difference in pupation date.
 
 ## Open questions for the pupation model
 
@@ -941,7 +968,7 @@ The average is not the whole story, though.
 
 ```{r}
 #| label: fig-compare
-#| fig-cap: "Two development models against the same observed catches, one point per comparable locality-year (n = 170). BioSIM is its modelled median flight date; bayessbw is its median pupation date plus the 12.9 d median pupation-to-catch interval. That shift is calibrated on these same data, so the bayessbw series sits on the 1:1 line by construction and only its scatter is informative. Left: predicted against observed median date. Right: the same offsets against latitude, with an ordinary least-squares fit per model."
+#| fig-cap: !expr 'sprintf("Two development models against the same observed catches, one point per comparable locality-year (n = %d). BioSIM is its modelled median flight date; bayessbw is its median pupation date plus the %.1f d median pupation-to-catch interval. That shift is calibrated on these same data, so the bayessbw series sits on the 1:1 line by construction and only its scatter is informative. Left: predicted against observed median date. Right: the same offsets against latitude, with an ordinary least-squares fit per model.", sum(cmp$comparable), median(cmp$lag_bayes[cmp$comparable]))'
 #| fig-width: 9
 #| fig-height: 4.4
 library(ggplot2)
@@ -1001,7 +1028,7 @@ p_lat <- ggplot(cmp_long, aes(Latitude, offset, colour = model, fill = model)) +
 
 ```{r}
 #| label: tbl-compare-structure
-#| tbl-cap: "Where the agreement is, and where it is not. Correlations over the 170 comparable locality-years"
+#| tbl-cap: !expr 'sprintf("Where the agreement is, and where it is not. Correlations over the %d comparable locality-years", sum(cmp$comparable))'
 ## The same four correlations for either model, so the columns can be read
 ## against each other.
 structure_r <- function(pred, offset) {
@@ -1098,12 +1125,14 @@ tibble::tibble(
   kable(align = c("l", "r", "r", "r"))
 ```
 
-Both models put the median catch about a fortnight after pupation, which is
-a plausible pupal period plus a few days of adult maturation, and the agreement
-between two independent development models on that interval is reassuring. The
-standard deviation of six days is the part worth pursuing: if it is structured
-by temperature rather than random, it is a pupal development function waiting
-to be fitted.
+The median catch falls
+`r sprintf("%.1f", median(cmp$lag_bayes))` days after bayessbw's pupation date
+and `r sprintf("%.1f", median(cmp$lag_biosim))` days after BioSIM's, a pupal
+period plus a few days of adult maturation in either case. The two intervals
+differ by the models' disagreement on the pupation date itself (@tbl-pupal-vs-biosim),
+not by anything about the pupal stage. The standard deviation of about six
+days is the part worth pursuing: if it is structured by temperature rather
+than random, it is a pupal development function waiting to be fitted.
 
 ## Would a degree-day pupal stage help? {#sec-lag}
 
@@ -1972,11 +2001,11 @@ predicted share of
 `r sprintf("%.2f", cnt_best_all$per_moth[cnt_best_all$model == "pup+"])`
 and `r sprintf("%.2f", cnt_best_all$per_moth[cnt_best_all$model == "pupreg+"])`
 against `r sprintf("%.2f", cnt_best_all$per_moth[cnt_best_all$model == "reg+"])`
-for the best. Two independent development models place pupation within a day
-of each other, so this is not a disagreement about the date; it is that
-bayessbw's year-to-year placement carries less of the signal the catches
-follow, consistent with its weaker year-mean correlation in
-@tbl-compare-structure.
+for the best. The two development models differ by about four days in the
+pupation date, but that offset is nearly constant and the calibration absorbs
+it, so this is not a disagreement about the date; it is that bayessbw's
+year-to-year placement carries less of the signal the catches follow,
+consistent with its weaker year-mean correlation in @tbl-compare-structure.
 
 **Almost all of the shape is empirical.** The fitted exponent on the regional
 curve is `r sprintf("%.2f", cnt_sum$exponent)`, so the modelled curve enters
@@ -2769,6 +2798,8 @@ sy <- list(
   off_p95    = median(cmp$d_p95),
   lag_bayes  = median(cmp$lag_bayes),
   lag_biosim = median(cmp$lag_biosim),
+  pup_diff   = median(pup_cmp$bayes_p50 - pup_cmp$biosim_p50),
+  pup_r      = cor(pup_cmp$bayes_p50, pup_cmp$biosim_p50),
   r_year     = with(cmp |> group_by(Year) |> filter(n() >= 5) |>
                       summarise(s = mean(sim_p50), o = mean(obs_p50),
                                 .groups = "drop"), cor(s, o)),
@@ -2791,15 +2822,16 @@ a meaningful model-versus-observed comparison. Hourly CaSR weather was
 extracted for all `r sy$records` locality-years
 (`r format(round(sy$hours / 1e6, 2), nsmall = 2)` million hours).
 
-## Two development models that agree with each other
+## Two development models that agree on the pattern, not the date
 
 BioSIM's `Spruce_Budworm_Biology` and the Bayesian model of bayessbw were
 fitted to different data, by different methods, and were driven by different
-weather — BioSIM's own station network against the CaSR grid. They place
-pupation within a day of each other (@tbl-pupal-vs-biosim), and both put the
-observed median catch about a fortnight after predicted pupation
-(`r sprintf("%.1f", sy$lag_bayes)` d for bayessbw,
-`r sprintf("%.1f", sy$lag_biosim)` d for BioSIM). In the pupation model,
+weather — BioSIM's own station network against the CaSR grid. They rank
+locality-years alike (r = `r sprintf("%.2f", sy$pup_r)`), but BioSIM pupates
+a median `r sprintf("%.1f", sy$pup_diff)` days earlier (@tbl-pupal-vs-biosim),
+so the observed median catch follows predicted pupation by
+`r sprintf("%.1f", sy$lag_bayes)` d for bayessbw and
+`r sprintf("%.1f", sy$lag_biosim)` d for BioSIM. In the pupation model,
 individual variation exceeds parameter uncertainty about fourfold: a
 population takes `r sprintf("%.1f", sy$pup_spread)` days to pupate from p05 to
 p95, while the posterior places its median to within

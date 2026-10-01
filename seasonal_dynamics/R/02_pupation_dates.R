@@ -5,12 +5,13 @@
 # development models of the shared data layer, as distributions comparable
 # with each other and with the observed catch percentiles.
 #
-# INPUT   data/interim/biosim_raw.rds      (R/03_biosim_phenology.R: daily
-#                                           BioSIM output, every run)
-#         data/processed/biosim_phenology.rds  (R/03: KeyID -> Location key)
+# INPUT   data/processed/biosim_phenology.rds  (R/03_biosim_phenology.R:
+#                                           series Pupation_mf and Pupae_mf)
+#         data/interim/biosim_raw.rds      (R/03: daily output, for the
+#                                           vanished-pupae check only)
 #         data/processed/pupal_phenology.rds   (R/04_pupal_phenology.R)
 #
-# BIOSIM PUPATION IS DERIVED, NOT READ
+# BIOSIM PUPATION IS DERIVED (in R/03), NOT A MODEL OUTPUT
 #   BioSIM reports pupae as a STOCK -- the share of the cohort that is a pupa
 #   on a given day -- not as a distribution of pupation dates. The median of
 #   that stock curve (the `Pupae_mf` series of R/03, used as "BioSIM pupation"
@@ -63,49 +64,44 @@ source(file.path("R", "functions", "phenology.R"))
 out_dir <- file.path("data", "processed", "seasonal")
 
 
-## ---- 1. BioSIM: cumulative pupation from mass balance ------------------------
+## ---- 1. BioSIM ------------------------------------------------------------------
+## The pupation-date distribution is built once, in the shared data layer
+## (R/03, series `Pupation_mf`, by the mass balance described above); its
+## percentiles and its total are read from there, and the stock median
+## (series `Pupae_mf`) is kept for comparison.
 
+pheno <- readRDS(file.path("data", "processed", "biosim_phenology.rds"))
+
+biosim_pup <- pheno %>%
+  filter(series == "Pupation_mf") %>%
+  select(Location, Year, KeyID, biosim_pup_p05 = p05, biosim_pup_p50 = p50,
+         biosim_pup_p95 = p95, biosim_pup_final = season_pct) %>%
+  left_join(pheno %>% filter(series == "Pupae_mf") %>%
+              select(Location, Year, biosim_stock_p50 = p50),
+            by = c("Location", "Year"))
+
+## The vanished pupae need the raw series: on a day when pupae disappear
+## without emerging the mass balance falls, and R/03 drops that increment.
 raw <- readRDS(file.path("data", "interim", "biosim_raw.rds"))
 
-## KeyID is a locality key; the Location name comes from R/03's own table.
-key <- readRDS(file.path("data", "processed", "biosim_phenology.rds")) %>%
-  distinct(KeyID, Year, Location)
-
-biosim_daily <- raw %>%
-  mutate(date = as.Date(sprintf("%d-%02d-%02d", Year, Month, Day)),
-         doy  = as.integer(format(date, "%j")),
-         pupae     = MalePupae + FemalePupae,
+loss <- raw %>%
+  mutate(doy = as.integer(format(as.Date(sprintf("%d-%02d-%02d", Year, Month, Day)), "%j")),
+         pupae = MalePupae + FemalePupae,
          emergence = MaleEmergence + FemaleEmergence) %>%
   group_by(KeyID, Year, doy) %>%                     # average over runs
-  summarise(pupae = mean(pupae), emergence = mean(emergence),
-            .groups = "drop") %>%
+  summarise(pupae = mean(pupae), emergence = mean(emergence), .groups = "drop") %>%
   arrange(KeyID, Year, doy) %>%
   group_by(KeyID, Year) %>%
-  mutate(cum_pupation = pupae + cumsum(emergence),
-         pupation     = c(cum_pupation[1], diff(cum_pupation))) %>%
-  ungroup()
+  mutate(cum = pupae + cumsum(emergence), inc = c(cum[1], diff(cum))) %>%
+  summarise(biosim_pup_lost = -sum(pmin(inc, 0)), .groups = "drop")
+n_loss <- sum(loss$biosim_pup_lost > 0.5)
 
-## Days on which pupae vanish without emerging (see the header).
-n_loss <- biosim_daily %>% filter(pupation < -0.5) %>% distinct(KeyID, Year) %>% nrow()
-
-biosim_pup <- biosim_daily %>%
-  group_by(KeyID, Year) %>%
-  summarise(
-    pct = list(curve_percentiles(doy, pmax(pupation, 0), c(0.05, 0.50, 0.95))),
-    biosim_pup_final    = sum(pmax(pupation, 0)),     # total entries, %
-    biosim_pup_lost     = -sum(pmin(pupation, 0)),     # vanished pupae, %
-    stock_p50           = curve_percentiles(doy, pupae, 0.50),
-    .groups = "drop"
-  ) %>%
-  mutate(biosim_pup_p05 = vapply(pct, `[[`, numeric(1), 1),
-         biosim_pup_p50 = vapply(pct, `[[`, numeric(1), 2),
-         biosim_pup_p95 = vapply(pct, `[[`, numeric(1), 3),
-         biosim_pup_complete = biosim_pup_final >= 99) %>%
-  select(-pct) %>%
-  inner_join(key, by = c("KeyID", "Year")) %>%
+biosim_pup <- biosim_pup %>%
+  left_join(loss, by = c("KeyID", "Year")) %>%
+  mutate(biosim_pup_complete = biosim_pup_final >= 99) %>%
   select(Location, Year, biosim_pup_p05, biosim_pup_p50, biosim_pup_p95,
          biosim_pup_final, biosim_pup_lost, biosim_pup_complete,
-         biosim_stock_p50 = stock_p50)
+         biosim_stock_p50)
 
 
 ## ---- 2. bayessbw -----------------------------------------------------------------

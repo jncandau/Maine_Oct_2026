@@ -104,7 +104,13 @@ adult stage and the flight curve is estimated from a handful of individuals.
 Male and female series were summed. Of the stage outputs, emergence and
 flight are daily fluxes whose cumulative curves are true distributions (male +
 female emergence sums to 100% of the cohort), whereas pupae and adults are
-stocks and were used only for comparison.
+stocks, counted on every day an individual spends in the stage. BioSIM does
+not report pupation dates, so they were recovered by mass balance: with
+mortality off, an individual that has pupated by day *t* is either still a
+pupa or has emerged, so cumulative pupation is the pupae present plus the
+cumulative emergence, and its daily increments are the distribution of
+pupation dates. The median of the pupal stock, which falls a median 4.9 days
+later, is the middle of the pupal period and was not used as a pupation date.
 
 **bayessbw.** Pupation dates were predicted with the Bayesian development
 model of Studens et al. (`kdis19/bayessbw`), distributed as the R package

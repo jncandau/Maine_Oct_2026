@@ -88,7 +88,10 @@ biosim_flight <- readRDS(file.path("data", "processed", "biosim_flight.rds")) %>
          sim_p95 = p95, sim_duration = duration)
 
 biosim_pupae <- readRDS(file.path("data", "processed", "biosim_phenology.rds")) %>%
-  filter(series == "Pupae_mf") %>%
+  ## The pupation-date distribution (R/03 `Pupation_mf`), not the median of
+  ## the pupal stock, which falls about five days later (middle of the pupal
+  ## period). Corrected 2026-10-01; earlier versions used `Pupae_mf`.
+  filter(series == "Pupation_mf") %>%
   select(Location, Year, biosim_pupation_p50 = p50)
 
 bayes_pupation <- readRDS(file.path("data", "processed", "pupal_phenology.rds")) %>%
