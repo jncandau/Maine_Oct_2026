@@ -105,9 +105,12 @@ regional_weather <- function(yr) {
 
 median_population <- function(m) apply(apply(m, 2, sort), 1, median)
 
-if (reuse && file.exists(out_file)) {
-  previous <- readRDS(out_file)
-} else {
+## The stored regional bayessbw run is reused only when it covers every year of
+## the current analysis set.
+previous <- if (reuse && file.exists(out_file)) readRDS(out_file) else NULL
+if (!is.null(previous) &&
+    length(setdiff(years, unique(previous$regional_bayes$Year))) > 0) {
+  message("  stored regional run does not cover every year: simulating again.")
   previous <- NULL
 }
 

@@ -58,6 +58,8 @@ library(lubridate)
 library(splines)
 library(glmmTMB)
 
+source(file.path("R", "functions", "phenology.R"))
+
 
 ## ---- 1. Configuration -------------------------------------------------------
 
@@ -114,18 +116,26 @@ emergence_curve <- function(lat, lon, year) {
   )
 }
 
-if (reuse && file.exists(emerg_file)) {
-  regional_emergence <- readRDS(emerg_file)
-} else {
-  regional_emergence <- bind_rows(lapply(years, function(yr) {
+## Topped up by year: an upstream change can add years to the analysis set, and
+## reusing a cache that predates them leaves those nights with no curve.
+cached_em <- if (reuse && file.exists(emerg_file)) readRDS(emerg_file) else NULL
+need_em   <- setdiff(years, unique(cached_em$Year))
+
+if (length(need_em) > 0) {
+  message("  regional emergence curve: fetching ", length(need_em), " year(s): ",
+          paste(need_em, collapse = ", "))
+  fetched_em <- bind_rows(lapply(need_em, function(yr) {
     bind_rows(lapply(seq_len(n_reps),
                      function(i) emergence_curve(centroid$Latitude,
                                                  centroid$Longitude, yr))) %>%
       group_by(Year, doy) %>%
       summarise(emergence = mean(emergence), .groups = "drop")
   }))
+  regional_emergence <- bind_rows(cached_em, fetched_em) %>% arrange(Year, doy)
   dir.create(file.path("data", "interim"), showWarnings = FALSE, recursive = TRUE)
   saveRDS(regional_emergence, emerg_file)
+} else {
+  regional_emergence <- cached_em
 }
 
 
@@ -290,13 +300,12 @@ scores <- cv %>%
 
 n_draw <- 100
 
+## The central 90% of a curve, from the same helper the observed phenology uses
+## (R/functions/phenology.R), so that a record whose catch sits on a single
+## night gets the width of a point mass rather than an NA.
 width_of <- function(doy, value) {
-  keep <- value > 0
-  if (sum(keep) < 2) return(NA_real_)
-  cum <- cumsum(value[keep]) / sum(value[keep])
-  q <- stats::approx(c(0, cum), c(min(doy[keep]) - 1, doy[keep]),
-                     xout = c(0.05, 0.95), ties = "ordered")$y
-  q[2] - q[1]
+  q <- curve_percentiles(doy, value, c(0.05, 0.95))
+  unname(q[2] - q[1])
 }
 
 set.seed(1978)

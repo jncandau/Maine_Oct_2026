@@ -77,18 +77,30 @@ because the day columns mix numbers with two text codes:
 
 | Cell | Meaning | Handling |
 |------|---------|----------|
-| `-` | missing, no count available | dropped; these cells fill the whole out-of-season range |
-| `m` | missing, no count available | kept as a row with `moths = NA` and `status = "missing"` |
+| `-` | no count reported | zero inside the season of that year, otherwise the night is dropped |
+| `m` | date sampled, value missing | kept as a row with `moths = NA` and `status = "missing"` |
 | number | nightly capture | kept, `status = "counted"` |
 
 : Day-cell codes in the `Flight` sheet {#tbl-codes tbl-colwidths="[10,40,50]"}
 
-Both codes mean missing data (confirmed 2026-09-26). They are treated
-differently only because of where they occur: `-` pads every record out to
-DOY 231, so keeping those cells would invent trap-nights, whereas `m` only
-ever appears inside a trapping season. Interior `-` cells — those falling
-between a record's first and last counted night — are real gaps, and are
-counted in `n_gap_nights` rather than lost.
+The two codes are not equivalent. `m` marks a night that was sampled and whose
+value is lost, and it stays missing. `-` carries no count at all, and what it
+means depends on when it falls: inside the flight season the trap was running
+and caught nothing, which is a **zero**; outside it the trap was not operating
+and the night does not exist.
+
+The season of a year is therefore defined once, from the catches themselves:
+it runs from the first to the last night on which any trap in the dataset
+caught a moth that year. Every record of that year is expanded to that window
+— its own counts where it has them, zeros on the `-` nights, `NA` on the `m`
+nights — and anything outside the window is dropped. `n_zero_filled` records
+how many nights each record owes to this rule.
+
+This is a modelling decision with teeth. It asserts that a trap with no entry
+for a mid-season night was running and empty, which turns roughly half of all
+nights in the dataset into informative zeros and means no record is truncated
+by construction: a trap that was in fact installed late is now credited with
+zeros it never recorded.
 
 The wide table is then pivoted to one row per record-night, and a calendar
 date is derived from the year and the day of year.
@@ -148,23 +160,23 @@ Two tables are written to `data/processed/`:
 #| tbl-cap: "The working dataset at a glance"
 tibble::tibble(
   Quantity = c("Trapping records", "Localities", "Years", "Trap-nights with a count",
-               "Nights coded `m` (missing)", "Interior gap nights (`-`)",
+               "Nights coded `m` (missing)", "Nights filled with a zero (`-`)",
                "Moths counted", "Season total, median (range)",
                "Nights per record, median (range)"),
   Value = c(
     format(nrow(trap_records), big.mark = ","),
     format(n_distinct(trap_records$locality), big.mark = ","),
-    sprintf("%d (%d\u2013%d)", n_distinct(trap_records$year),
+    sprintf("%d (%d-%d)", n_distinct(trap_records$year),
             min(trap_records$year), max(trap_records$year)),
     format(sum(trap_daily$status == "counted"), big.mark = ","),
     format(sum(trap_daily$status == "missing"), big.mark = ","),
-    format(sum(trap_records$n_gap_nights), big.mark = ","),
+    format(sum(trap_records$n_zero_filled), big.mark = ","),
     format(sum(trap_daily$moths, na.rm = TRUE), big.mark = ","),
-    sprintf("%s (%s\u2013%s)",
+    sprintf("%s (%s-%s)",
             format(median(trap_records$season_total), big.mark = ","),
             format(min(trap_records$season_total), big.mark = ","),
             format(max(trap_records$season_total), big.mark = ",")),
-    sprintf("%d (%d\u2013%d)", median(trap_records$n_nights),
+    sprintf("%d (%d-%d)", median(trap_records$n_nights),
             min(trap_records$n_nights), max(trap_records$n_nights))
   )
 ) |>
@@ -213,36 +225,39 @@ report problems; they never repair them.
 ```{r}
 #| label: tbl-quality
 #| tbl-cap: "Quality checks on the retained records"
-gaps <- filter(trap_records, n_gap_nights > 0)
+filled <- filter(trap_records, n_zero_filled > 0)
 miss <- trap_daily |> filter(status == "missing") |> distinct(flightID)
 tibble::tibble(
   Check = c("Season total disagrees with the sum of the daily counts",
             "Locality-year with more than one record",
             "Records with nights coded `m`",
-            "Records with interior gaps (`-` inside the season)"),
-  Records = c(0L, 0L, nrow(miss), nrow(gaps))
+            "Records with a night filled as a zero"),
+  Records = c(0L, 0L, nrow(miss), nrow(filled))
 ) |>
   kable(align = c("l", "r"))
 ```
 
 ```{r}
 #| label: tbl-gaps
-#| tbl-cap: "Records with unrecorded nights inside their trapping season"
+#| tbl-cap: "The records that owe the most nights to the zero-fill rule"
 trap_records |>
-  filter(n_gap_nights > 0) |>
+  slice_max(n_zero_filled, n = 10) |>
   transmute(flightID, year = as.character(year), locality,
-            season = sprintf("%d\u2013%d", first_doy, last_doy),
-            `nights counted` = n_nights, `gap nights` = n_gap_nights,
+            season = sprintf("%d-%d", season_first, season_last),
+            `nights counted` = n_nights, `filled as zero` = n_zero_filled,
             `season total` = season_total) |>
-  arrange(desc(`gap nights`)) |>
   kable(format.args = list(big.mark = ","))
 ```
 
-Georgetown Township 1969 is the one record where the gaps dominate: 23
-unrecorded nights against 21 counted, over a nominal season of 44 days. The
-1980 pooled records were operated on an irregular schedule rather than
-interrupted. All other retained records are continuous between their first and
-last night.
+Of the `r format(sum(trap_daily$status == "counted"), big.mark = ",")` counted
+nights, `r format(sum(trap_records$n_zero_filled), big.mark = ",")` are zeros
+supplied by this rule and
+`r sprintf("%.0f%%", 100 * mean(trap_daily$moths[trap_daily$status == "counted"] == 0))`
+of all counted nights caught nothing. Only
+`r format(sum(trap_daily$status == "missing"), big.mark = ",")` nights remain
+missing, all of them `m` codes inside a season window; the large June blocks of
+`m` codes in 1982 and 1983 fall before the first capture of their year and so
+leave the dataset with the rest of the out-of-season range.
 
 ## Minimum effort for phenology
 
@@ -401,7 +416,7 @@ tibble::tibble(
   Value = c(
     format(nrow(wsum), big.mark = ","),
     n_distinct(wsum$Location),
-    sprintf("%d (%d\u2013%d)", n_distinct(wsum$Year), min(wsum$Year), max(wsum$Year)),
+    sprintf("%d (%d-%d)", n_distinct(wsum$Year), min(wsum$Year), max(wsum$Year)),
     format(sum(wsum$hours), big.mark = ","),
     ## tiles are named by rlat band: 351-385 is the southern one, 386-420 the northern
     paste(as.integer(table(wsum$tile[!duplicated(wsum$Location)])), collapse = " / "),
@@ -612,7 +627,7 @@ tibble::tibble(
   Value = c(
     format(nrow(biosim_flight), big.mark = ","),
     n_distinct(biosim_flight$Location),
-    sprintf("%d (%d\u2013%d)", n_distinct(biosim_flight$Year),
+    sprintf("%d (%d-%d)", n_distinct(biosim_flight$Year),
             min(biosim_flight$Year), max(biosim_flight$Year)),
     sprintf("%d", max(biosim_flight$n_runs)),
     "829,060 raw / 82,906 averaged",
@@ -2617,6 +2632,12 @@ Of the `r cs$n_cens_nights` missing nights in the working dataset,
 `r cs$n_left` are left-censored and `r cs$n_right` right-censored, spread over
 `r cs$n_records` records. A further `r cs$n_excluded` record was removed from
 the dataset because of where its censored nights fell (below).
+
+Left-censoring has disappeared from the dataset, and not by accident: the large
+June blocks of `m` codes fall before the first capture of their year, so the
+season window of @sec-traps excludes them along with the rest of the
+out-of-season range. Every censored night that survives is in the declining
+tail.
 
 ## The side is not the magnitude
 

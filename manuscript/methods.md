@@ -6,10 +6,22 @@ Nightly captures of spruce budworm (*Choristoneura fumiferana*) adults came
 from the Eastern Spruce Budworm Phenology database (Fournier, Candau et al.,
 CC-BY), whose *Flight* sheet holds 763 trapping records in wide form: one row
 per site × year × sampling method × sex, with one column per day of year from
-160 to 231. Two cell codes, `-` and `m`, both denote a missing count; `-`
-additionally pads the out-of-season range, so leading and trailing `-` cells
-were dropped and only the trapping period retained, within which both codes
-became `NA`.
+160 to 231. Two cell codes appear among the numbers. `m`
+marks a night that was sampled and whose count is lost. `-` carries no count at
+all, and its meaning depends on when it falls: inside the flight season the
+trap was running and caught nothing, which is a zero, while outside it the trap
+was not operating and the night does not exist.
+
+The flight season of each year was therefore defined from the catches
+themselves, as the interval from the first to the last night on which any trap
+in the dataset caught a moth that year, and every record of that year was
+expanded to that interval: its own counts where it had them, zeros on the `-`
+nights, `NA` on the `m` nights, and nothing outside the interval. This
+treatment supplies 2,720 of the 8,286 counted nights and makes half of all
+nights informative zeros. It also asserts that a trap with no entry for a
+mid-season night was running and empty, so no record is truncated by
+construction and a trap installed late is credited with zeros it never
+recorded.
 
 Records were restricted to Maine light traps operated between 1968 and 1989 —
 the overlap with the reanalysis described below — with a season total above 99
@@ -18,10 +30,11 @@ Where one trap was reported as separate male and female records, the two were
 summed night by night before the threshold was applied (two traps in 1980).
 The working dataset comprised **226 trapping records at 49 localities over 22
 years** (43.60–47.44° N, 67.33–70.85° W), reshaped to one row per trap-night:
-5,590 counted nights and 152 missing.
+8,286 counted nights, of which 2,720 are zeros supplied by the rule above,
+and 30 missing.
 
-Missing nights were treated as censoring rather than as nights of unknown
-catch drawn from the whole season. Because flight is a seasonal curve, the
+Nights left missing by an `m` code were treated as censoring rather than as
+nights of unknown catch drawn from the whole season. Because flight is a seasonal curve, the
 position of a gap determines which part of that curve is unidentified: a
 missing night before 15 July bounds the rise of the season (left-censored) and
 one after it bounds the decline (right-censored). The side was recorded for
@@ -31,11 +44,14 @@ percentiles are not identifiable at face value can be identified rather than
 treated as complete.
 
 Records were flagged rather than filtered, so that every subsequent table
-could report the population it referred to. `usable_phenology` (n = 186) marks
+could report the population it referred to. `usable_phenology` (n = 223) marks
 records whose daily series is complete enough to describe a flight curve;
 `flight_complete` (n = 206) marks those whose trapping period brackets the
-modelled flight season; their intersection, `comparable` (n = **169**
-locality-years), is the set used for all model comparisons.
+modelled flight season; their intersection, `comparable` (n = **203**
+locality-years), is the set used for all model comparisons. Because every
+record of a year now spans the same nights, the coverage and tail-share
+criteria behind `usable_phenology` can no longer detect a trap that started
+late or stopped early, and the flag is correspondingly permissive.
 
 One record was removed from the dataset rather than flagged: a trap whose only
 two censored nights fell at the peak of its season, where the fitted model
@@ -148,7 +164,7 @@ site-specific rather than regional drivers — were fitted in the same framework
 
 ## Conditional distribution of a night's catch
 
-The distributional family was selected on the 4,297 nights of the analysis set
+The distributional family was selected on the 7,481 nights of the analysis set
 by AIC among Poisson, type-1 and type-2 negative binomial, Poisson-lognormal
 and zero-inflated negative binomial fits with the same mean structure. The
 empirical variance–mean relationship was estimated by binning nights on a
@@ -159,8 +175,8 @@ cross-checked in **lme4** and **MASS**.
 
 ## Out-of-sample evaluation
 
-All model comparison was leave-one-year-out: each of the 19 years was
-predicted from a model fitted to the other 18, using the training fixed
+All model comparison was leave-one-year-out: each of the 20 years was
+predicted from a model fitted to the other 19, using the training fixed
 effects only. The locality-year effect of a held-out year is never estimated
 and never needed, because shares are renormalised within each locality-year
 and any locality-year-constant term cancels; the season total is an input, so

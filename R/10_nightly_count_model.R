@@ -136,18 +136,27 @@ biosim_daily_curve <- function(lat, lon, year) {
   )
 }
 
-if (reuse && file.exists(reg_file)) {
-  regional_daily <- readRDS(reg_file)
-} else {
-  regional_daily <- bind_rows(lapply(years, function(yr) {
+## The cache is topped up rather than reused wholesale: a change upstream can
+## add years to the analysis set, and silently reusing a cache that predates
+## them leaves those nights with no curve at all.
+cached_reg <- if (reuse && file.exists(reg_file)) readRDS(reg_file) else NULL
+need_reg   <- setdiff(years, unique(cached_reg$Year))
+
+if (length(need_reg) > 0) {
+  message("  regional flight curve: fetching ", length(need_reg), " year(s): ",
+          paste(need_reg, collapse = ", "))
+  fetched <- bind_rows(lapply(need_reg, function(yr) {
     reps <- bind_rows(lapply(seq_len(n_reps), function(i)
       biosim_daily_curve(centroid$Latitude, centroid$Longitude, yr)))
     reps %>%
       group_by(Year, doy) %>%
       summarise(flight_reg = mean(flight), .groups = "drop")
   }))
+  regional_daily <- bind_rows(cached_reg, fetched) %>% arrange(Year, doy)
   dir.create(file.path("data", "interim"), showWarnings = FALSE, recursive = TRUE)
   saveRDS(regional_daily, reg_file)
+} else {
+  regional_daily <- cached_reg
 }
 
 
@@ -193,21 +202,27 @@ regional_weather <- function(yr, weather_hourly) {
     arrange(Date, Hour)
 }
 
-if (reuse && file.exists(pupreg_file)) {
-  regional_pupal <- readRDS(pupreg_file)
-} else {
+## Topped up by year, like the flight curve above.
+cached_pup <- if (reuse && file.exists(pupreg_file)) readRDS(pupreg_file) else NULL
+need_pup   <- setdiff(years, unique(cached_pup$Year))
+
+if (length(need_pup) > 0) {
+  message("  regional pupation curve: simulating ", length(need_pup), " year(s): ",
+          paste(need_pup, collapse = ", "))
   weather_hourly <- readRDS(file.path("data", "processed", "weather_hourly.rds"))
   RNGkind("L'Ecuyer-CMRG")
   set.seed(seed)
-  regional_pupal <- bind_rows(lapply(years, function(yr) {
+  regional_pupal <- bind_rows(cached_pup, bind_rows(lapply(need_pup, function(yr) {
     m <- dev_days(weather = regional_weather(yr, weather_hourly),
                   sbwcolony = colony, period = "hour", stage = "Pupa",
                   ecdf = FALSE, n.post = n_post, individuals = individuals)
     pop <- median_population(m)
     pupal_curve(pop) %>% mutate(Year = yr, p50_pupreg = stats::median(pop))
-  }))
+  }))) %>% arrange(Year, doy)
   dir.create(file.path("data", "interim"), showWarnings = FALSE, recursive = TRUE)
   saveRDS(regional_pupal, pupreg_file)
+} else {
+  regional_pupal <- cached_pup
 }
 
 regional_pupal_curve <- select(regional_pupal, Year, doy, flight_pupreg = pct)

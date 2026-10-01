@@ -403,6 +403,78 @@ trap_records <- trap_records %>%
 trap_daily <- trap_daily %>%
   filter(flightID %in% trap_records$flightID)
 
+
+## ---- 5c. The season of a year, and the zeros inside it ----------------------
+## A "-" cell means no count was reported for that date. Inside the flight
+## season it means the trap was running and caught nothing, which is a zero and
+## not a missing value; outside it the trap was not operating and the night
+## does not exist. The season of a year is therefore bounded by the first and
+## the last night on which ANY trap in the dataset caught a moth that year, and
+## every retained record is expanded to that window: its own counts where it
+## has them, zeros on the "-" nights, and NA on the "m" nights, which remain
+## missing (section 2) and censor the curve (`censoring`).
+##
+## Consequences, which are deliberate: every record of a year then spans the
+## same nights, so no record is truncated by construction, and the tail-share
+## and coverage criteria below can no longer detect a trap that started late or
+## stopped early. `n_zero_filled` records how many nights each record owes to
+## this rule.
+
+season_window <- trap_daily %>%
+  filter(status == "counted", moths > 0) %>%
+  group_by(year) %>%
+  summarise(season_first = min(doy), season_last = max(doy), .groups = "drop")
+
+night_grid <- season_window %>%
+  mutate(doy = Map(seq, season_first, season_last)) %>%
+  tidyr::unnest(doy) %>%
+  inner_join(select(trap_records, flightID, locality, latitude, longitude,
+                    year, method, sex),
+             by = "year", relationship = "many-to-many")
+
+trap_daily <- night_grid %>%
+  left_join(select(trap_daily, flightID, doy, moths, status),
+            by = c("flightID", "doy")) %>%
+  mutate(
+    zero_filled = is.na(status),
+    status      = if_else(zero_filled, "counted", status),
+    moths       = if_else(zero_filled, 0, moths),
+    date        = as.Date(paste0(year, "-01-01")) + (doy - 1L),
+    censor_cut  = as.Date(paste0(year, "-", censor_cut_md)),
+    censoring   = case_when(
+      status != "missing" ~ NA_character_,
+      date < censor_cut   ~ "left",
+      date > censor_cut   ~ "right",
+      TRUE                ~ "on_cut"
+    )
+  ) %>%
+  select(flightID, locality, latitude, longitude, year, date, doy,
+         moths, status, censoring, zero_filled, method, sex) %>%
+  arrange(flightID, doy)
+
+## Effort is recomputed on the expanded table: the columns joined in section 5
+## described the record's own trapping period and no longer apply.
+trap_records <- trap_records %>%
+  select(-first_doy, -last_doy, -n_nights, -n_missing,
+         -n_cens_left, -n_cens_right, -moths_total) %>%
+  left_join(
+    trap_daily %>%
+      group_by(flightID) %>%
+      summarise(
+        first_doy     = min(doy),
+        last_doy      = max(doy),
+        n_nights      = sum(status == "counted"),
+        n_missing     = sum(status == "missing"),
+        n_zero_filled = sum(zero_filled),
+        n_cens_left   = sum(censoring == "left",  na.rm = TRUE),
+        n_cens_right  = sum(censoring == "right", na.rm = TRUE),
+        moths_total   = sum(moths, na.rm = TRUE),
+        .groups       = "drop"
+      ),
+    by = "flightID"
+  ) %>%
+  left_join(season_window, by = "year")
+
 ## The workbook total should equal the sum of the daily counts whenever no night
 ## is missing. Differences are listed rather than corrected.
 total_mismatch <- trap_records %>%
@@ -416,24 +488,8 @@ duplicate_records <- trap_records %>%
   count(locality, year, method, sex, name = "n_records") %>%
   filter(n_records > 1)
 
-## Nights with no count inside the trapping period: "-" cells between the first
-## and the last counted night of a record. Both codes mean missing data, so
-## these are real gaps and belong in the effort accounting.
-## For pooled records the pattern is taken from the lowest-id component, whose
-## night set is identical to its partner's (checked in section 4b).
-interior_gaps <- trap_long %>%
-  filter(flightID %in% trap_records$flightID, status == "not_sampled") %>%
-  inner_join(
-    trap_daily %>% group_by(flightID) %>%
-      summarise(lo = min(doy), hi = max(doy), .groups = "drop"),
-    by = "flightID"
-  ) %>%
-  filter(doy > lo, doy < hi) %>%
-  count(flightID, name = "n_gap_nights")
-
-trap_records <- trap_records %>%
-  left_join(interior_gaps, by = "flightID") %>%
-  mutate(n_gap_nights = coalesce(n_gap_nights, 0L))
+## Interior "-" nights no longer exist as gaps: section 5c turned every one
+## inside the season window into a zero, and `n_zero_filled` counts them.
 
 ## Share of the season's catch taken on the first and on the last counted
 ## night. A large share means the trap started after the flight had begun, or
