@@ -396,10 +396,175 @@ nightly temperature is accounted for, which the daily analysis is equipped to
 test.
 
 
+# Asymmetry of the season {#sec-asym}
+
+```{r}
+#| label: asym-data
+asy <- readRDS(file.path("data", "processed", "seasonal", "asymmetry.rds"))
+ad  <- asy$data
+aloc <- asy$location; acomp <- asy$components; arel <- asy$reliability
+acor <- asy$correlations
+lget <- function(v, col) aloc[[col]][aloc$measure == v]
+vget <- function(v, comp) 100 * acomp$share[acomp$measure == v & acomp$component == comp]
+rget <- function(v, col) arel[[col]][arel$measure == v]
+kget <- function(v, w) acor$r[acor$measure == v & acor$with == w]
+## Split of the asymmetry-date relationship into within-year and between-year
+## parts, for the text and the figure.
+a_within <- ad |> group_by(year) |> filter(n() >= 3) |>
+  mutate(k = kelly - mean(kelly), d = p50 - mean(p50)) |> ungroup()
+a_years <- ad |> group_by(year) |>
+  summarise(k = mean(kelly), d = mean(p50), .groups = "drop")
+```
+
+`seasonal_dynamics/R/05_asymmetry.R` covers the first two steps: choosing a
+measure and describing it. It does not yet model asymmetry.
+
+## The measure
+
+The asymmetry of @sec-season, (p95 - p50) - (p50 - p05), is in days. Two
+measures that do not depend on the length of the season replace it, both
+bounded between -1 and 1 and positive when the decline is longer than the rise:
+
+- **Kelly**, (p90 + p10 - 2 p50) / (p90 - p10), over the central 80% of the catch;
+- **Bowley**, (p75 + p25 - 2 p50) / (p75 - p25), over the central 50%.
+
+Neither uses p05 or p95, the percentiles most exposed to the right-censored
+records and to single stray nights in the tails. Kelly is the primary measure:
+Bowley rests on a central 50% that is often only three or four nights wide.
+
+The concern that motivated the change turns out not to bite. The day-based
+measure is uncorrelated with season width (r =
+`r sprintf("%+.2f", asy$summary$r_days_width)`), because width changes its
+magnitude but not its sign, and Kelly tracks it closely (r =
+`r sprintf("%.2f", kget("kelly", "asymmetry in days (01)"))`). The scale-free
+measure is still the right one to model, because its value means the same thing
+in a ten-day season as in a thirty-day one.
+
+## Is the typical season skewed?
+
+No. Over `r asy$summary$n` locality-years (usable for phenology, at least three
+positive nights), the median Kelly asymmetry is
+`r sprintf("%+.2f", lget("kelly", "median_raw"))` and
+`r sprintf("%.0f%%", 100 * lget("kelly", "share_positive"))` of seasons are
+right-skewed. A mixed model with crossed random effects of year and locality,
+which does not count seasons sharing a year or a place as independent, puts
+the mean at `r sprintf("%+.3f", lget("kelly", "intercept"))`
+(`r sprintf("%+.3f", lget("kelly", "lo"))` to
+`r sprintf("%+.3f", lget("kelly", "hi"))`). Bowley gives the same answer
+(`r sprintf("%+.3f", lget("bowley", "intercept"))`,
+`r sprintf("%+.3f", lget("bowley", "lo"))` to
+`r sprintf("%+.3f", lget("bowley", "hi"))`). The flight season is symmetric on
+average, and individual seasons depart from symmetry in both directions.
+
+## Signal or noise?
+
+```{r}
+#| label: tbl-asym-variance
+#| tbl-cap: "Where the variation in asymmetry lies. Variance shares from the mixed model; sampling variance from resampling every record's own catch"
+tibble::tibble(
+  Measure = c("Kelly", "Bowley"),
+  `Year, %` = sprintf("%.0f", c(vget("kelly", "year"), vget("bowley", "year"))),
+  `Locality, %` = sprintf("%.0f", c(vget("kelly", "locality"), vget("bowley", "locality"))),
+  `Locality-year, %` = sprintf("%.0f", c(vget("kelly", "Residual"), vget("bowley", "Residual"))),
+  `Sampling sd, median` = sprintf("%.3f", c(rget("kelly", "median_se"), rget("bowley", "median_se"))),
+  `Reliability` = sprintf("%.2f", c(rget("kelly", "reliability"), rget("bowley", "reliability")))
+) |>
+  kable(align = c("l", "r", "r", "r", "r", "r"))
+```
+
+Each record's asymmetry is estimated from a finite catch. To measure that
+error, `r asy$summary$n_boot` catches of the record's own size were drawn from
+its own nightly shares and the measure recomputed. The sampling error is small
+(median sd `r sprintf("%.3f", rget("kelly", "median_se"))` against a spread of
+`r sprintf("%.2f", sd(ad$kelly))` between seasons), so
+`r sprintf("%.0f%%", 100 * rget("kelly", "reliability"))` of the observed
+variation is not counting noise.
+
+Almost none of it belongs to the year or to the locality:
+`r sprintf("%.0f%%", vget("kelly", "Residual"))` of the variance of Kelly is at
+the level of the individual locality-year. A season's asymmetry is not
+inherited from its year (as the median date largely is) or from its place (as
+the model offsets of the daily analysis were).
+
+What the resampling cannot see is the night-to-night variability of flight
+itself. It treats moths as independent draws from the season's curve, whereas
+the daily analysis found nightly catches far more variable than that (NB2
+θ ≈ 0.19). A single warm or cold night, or a single mass flight, moves a
+percentile, and that is part of the "real" variation here. The asymmetry of a
+season may therefore be as much a property of its weather in particular weeks
+as of its emergence.
+
+## What asymmetry goes with
+
+```{r}
+#| label: tbl-asym-cor
+#| tbl-cap: "Correlation of the Kelly and Bowley asymmetry with other properties of the season"
+acor |>
+  filter(with != "asymmetry in days (01)") |>
+  tidyr::pivot_wider(names_from = measure, values_from = r) |>
+  transmute(`Property` = with, Kelly = sprintf("%+.2f", kelly),
+            Bowley = sprintf("%+.2f", bowley)) |>
+  kable(align = c("l", "r", "r"))
+```
+
+Asymmetry is unrelated to the width of the season, to the size of the catch
+and to latitude. Its one clear association is with the median catch date
+(r = `r sprintf("%+.2f", kget("kelly", "median catch date"))`), and that
+association is entirely **within years**. Among localities of the same year,
+one that flies later than the others has a left-skewed season, a long rise
+and an abrupt end (r = `r sprintf("%+.2f", cor(a_within$k, a_within$d))` over
+`r n_distinct(a_within$year)` years). Between year means there is no relation
+(r = `r sprintf("%+.2f", cor(a_years$k, a_years$d))`).
+
+This is not an artefact of the season window. The asymmetry is unrelated to
+how close a record's p10 or p90 comes to the first or last capture of its year.
+
+```{r}
+#| label: fig-asym
+#| fig-cap: "Kelly asymmetry of each locality-year. Left: by year; black points are year means. Right: against the locality's departure from the mean median catch date of its year, with a least-squares line. Positive asymmetry: longer decline than rise."
+#| fig-width: 9
+#| fig-height: 3.8
+library(patchwork)
+pa <- ggplot(ad, aes(year, kelly)) +
+  geom_hline(yintercept = 0, colour = "grey70") +
+  geom_point(colour = "grey55", size = 1, position = position_jitter(width = 0.15, seed = 1)) +
+  geom_point(data = a_years, aes(year, k), colour = "black", size = 1.8) +
+  labs(x = "Year", y = "Kelly asymmetry") +
+  theme_minimal(base_size = 10) + theme(panel.grid.minor = element_blank())
+pb <- ggplot(a_within, aes(d, kelly)) +
+  geom_hline(yintercept = 0, colour = "grey70") +
+  geom_point(colour = "grey55", size = 1) +
+  geom_smooth(method = "lm", se = FALSE, colour = "black", linewidth = 0.7) +
+  labs(x = "Median catch date minus the year's mean (days)", y = NULL) +
+  theme_minimal(base_size = 10) + theme(panel.grid.minor = element_blank())
+pa + pb
+```
+
+Two readings fit a within-year pattern, and they are where step 3 should
+start.
+
+- **A common end to the season.** If flight ends at about the same time
+  everywhere in a year, for example at the first cool spell, a locality that
+  started late has its decline cut short and an early one has room for a long
+  tail.
+- **Moths from elsewhere.** If part of the catch is moths that emerged
+  elsewhere in the region, a late locality receives them before its own moths
+  fly, which stretches its rise, and an early locality receives them after,
+  which stretches its decline. That reading fits the daily analysis's finding
+  that one regional development curve predicts the catches better than local
+  ones.
+
+The first predicts that late localities share their end date with the rest of
+the year; the second predicts that the early part of a late locality's catch
+is synchronous with the peak elsewhere. Both are testable with the data in
+hand.
+
+
 # Next steps
 
-1. **Asymmetry** (not yet modelled): see the options discussed with the
-   analysis; the first decision is a measure that does not scale with width.
+1. **Asymmetry, step 3**: test the two within-year readings of @sec-asym --
+   a common end date to the season, against moths arriving from elsewhere --
+   and only then decide what to model.
 2. **Temperature summaries per locality-year**, as an alternative driver to
    the development models: degree-days and window means, at the trap and
    averaged over the network.
