@@ -1065,11 +1065,243 @@ skill. It gives no interval for a single night's count, since the seasonal
 model has no term for nightly variability. The pupation drivers remain
 available through `driver = "BioSIM pupation"` or `"bayessbw pupation"`.
 
+# The local component {#sec-local}
+
+```{r}
+#| label: local-data
+lc  <- readRDS(file.path("data", "processed", "seasonal", "local_component.rds"))
+lcs <- lc$summary; lcg <- lcs$gradients
+lvc <- lc$variance; lsc <- lc$scores; lco <- lc$coefs
+vget <- function(m, comp, col = "sd") lvc[[col]][lvc$model == m & lvc$component == comp]
+lget <- function(sp, sch, col) lsc[[col]][lsc$spec == sp & lsc$scheme == sch]
+cget <- function(sp, tm, col = "estimate") lco[[col]][lco$spec == sp & lco$term == tm]
+f1 <- function(x) sprintf("%.1f", x); f2 <- function(x) sprintf("%.2f", x)
+f3 <- function(x) sprintf("%.3f", x)
+```
+
+The adopted centre follows the differences between years closely and the
+differences between localities of the same year hardly at all (slope
+`r f3(fl_fit$centre[["xW"]])` on BioSIM's local departure). This section asks
+what the remaining local part of the median catch date is made of, and
+whether anything available at prediction time explains it
+(`seasonal_dynamics/R/09_local_component.R`, the same
+`r lcs$n` locality-years, `r lcs$n_loc` localities, `r lcs$n_loc_multi` of
+them trapped in two years or more).
+
+## What the residual is made of
+
+The residuals of the centre model were split by a mixed model into a year
+part, a persistent locality part (habitual lateness) and a locality-year
+remainder. The sampling variance of each observed median was measured by
+resampling the record's own catch `r lcs$n_boot` times; subtracting it from
+the remainder leaves the transient part, a real departure of that locality in
+that year.
+
+```{r}
+#| label: tbl-local-variance
+#| tbl-cap: "Variance components of the median catch date, before and after the adopted centre (SD in days and share of the total). Interval: parametric bootstrap of the residual model, as SD"
+sd_ci <- function(comp) {
+  lo <- vget("centre residual", comp, "lo"); hi <- vget("centre residual", comp, "hi")
+  if (is.na(lo)) "" else sprintf("%.2f to %.2f", sqrt(max(lo, 0)), sqrt(hi))
+}
+comps <- c("year", "locality", "transient", "sampling")
+tibble::tibble(
+  Component = c("Year", "Locality (persistent)", "Locality-year (transient)", "Sampling"),
+  `Observed median, SD` = f2(sapply(comps, function(k) vget("observed median", k))),
+  `Share` = f2(sapply(comps, function(k) vget("observed median", k, "share"))),
+  `Centre residual, SD` = f2(sapply(comps, function(k) vget("centre residual", k))),
+  `95% interval` = sapply(comps, sd_ci),
+  ` Share` = f2(sapply(comps, function(k) vget("centre residual", k, "share")))
+) |>
+  kable(align = c("l", "r", "r", "r", "r", "r"))
+```
+
+Three things stand out.
+
+- **Sampling error is negligible.** The median of a season is measured to
+  within `r f2(lcs$samp_sd)` days (SD), so the residual is not count noise.
+- **The driver removes the year and nothing else.** The year SD falls from
+  `r f2(vget("observed median", "year"))` to
+  `r f2(vget("centre residual", "year"))` days. The locality and transient
+  components are the same before and after it.
+- **Most of what is left is transient.** A locality departs from its year by
+  `r f2(vget("centre residual", "transient"))` days (SD) in a way it does not
+  repeat in other years. Habitual lateness is real but smaller
+  (`r f2(vget("centre residual", "locality"))` days). It is the same
+  property that @sec-asym-mech found shifting a late locality's peak and end
+  but not its start.
+
+## Is the local part spatially structured?
+
+Within a year, the residuals of two localities close together agree, and
+those of two localities far apart disagree (@fig-local, centre). The
+correlation is `r f2(lc$correlogram$r[1])` under 25 km (only
+`r lc$correlogram$n_pairs[1]` pairs), near
+`r f2(mean(lc$correlogram$r[2:3]))` between 25 and 100 km, and
+`r f2(tail(lc$correlogram$r, 1))` beyond 200 km. Centring within a year alone
+would give `r f2(mean(lc$correlogram$null))`. The same locality in two
+different years correlates at only `r f2(lcs$same_loc_r)`. The local
+component is therefore a **regional pattern that changes from year to year**,
+not a fixed property of the sites.
+
+A plane in latitude and longitude, fitted separately to each of the
+`r lcg$n_years` years with at least six localities, explains
+`r sprintf("%.0f%%", 100 * lcg$share)` of the within-year residual variance,
+against `r sprintf("%.0f%%", 100 * lcg$null_mean)` when the residuals are
+permuted among the localities of a year (p = `r f3(lcg$p)`). Most of that
+pattern is a north-south gradient whose strength varies between years:
+
+- **Latitude.** The observed gradient averages
+  `r sprintf("%+.2f", lcg$obs_lat_mean)` days per degree north and varies
+  between years with an SD of `r f2(lcg$obs_lat_sd_true)` days per degree
+  once the sampling error of each year's slope is removed. BioSIM's gradient
+  averages `r sprintf("%+.2f", lcg$biosim_lat_mean)`, about
+  `r sprintf("%.0f", lcg$biosim_lat_mean / lcg$obs_lat_mean)` times steeper, and
+  its year-to-year changes are unrelated to the observed ones
+  (r = `r f2(lcg$r_lat)`, @fig-local, right).
+- **Longitude.** The observed gradient
+  (`r sprintf("%+.2f", lcg$obs_lon_mean)` days per degree) barely changes
+  between years (SD `r f2(lcg$obs_lon_sd_true)` net of sampling). BioSIM
+  follows its year-to-year changes partly (r = `r f2(lcg$r_lon)`).
+
+BioSIM driven by CaSR temperatures thus predicts a strong, stable
+north-south progression of flight. The catches show a weak one that changes
+from year to year. That is why the fitted slope on BioSIM's local departure
+is close to zero: the model's local signal is mostly a gradient the catches
+do not have.
+
+## Can it be predicted?
+
+Each candidate term was added to the adopted centre and scored like the
+centre options (@sec-centre). Every covariate entered as a departure from its
+year mean, so it could only act on the local component. The candidates were:
+
+- **geography**: latitude, longitude and elevation;
+- **temperature**: the local anomaly of mean CaSR temperature over
+  1 May to 30 June (larval development) or 15 June to 15 July (pupal and
+  pre-flight period), two windows fixed in advance;
+- **catch**: the local anomaly of the season total, already an input of the
+  predictor;
+- **habitual lateness**: a random locality intercept, the locality's shrunken
+  mean residual in its training years. It is known only for localities
+  trapped before, so it can help a new year but not a new locality. A
+  year-adjusted version estimates it net of the year errors.
+
+```{r}
+#| label: tbl-local-scores
+#| tbl-cap: "Candidate local terms added to the adopted centre. Gain: change in log score per moth of the full predictor relative to the adopted centre (positive is better). MAE: error of the median catch date; per moth: the same weighted by the season total. r within: correlation of predicted and observed departures from the year mean"
+lsc |>
+  tidyr::pivot_wider(id_cols = spec, names_from = scheme,
+                     values_from = c(gain, mae, mae_moth, r_within)) |>
+  arrange(desc(`gain_leave-one-year-out`)) |>
+  transmute(`Centre` = spec,
+            `Gain, new year` = sprintf("%+.3f", `gain_leave-one-year-out`),
+            `MAE` = f2(`mae_leave-one-year-out`),
+            `MAE per moth` = f2(`mae_moth_leave-one-year-out`),
+            `r within` = sprintf("%+.2f", `r_within_leave-one-year-out`),
+            `Gain, new locality` = sprintf("%+.3f", `gain_leave-one-locality-out`),
+            ` MAE` = f2(`mae_leave-one-locality-out`)) |>
+  kable(align = c("l", "r", "r", "r", "r", "r", "r"))
+```
+
+**No local term improves the predictor.** None raises the log score by more
+than `r f3(max(lsc$gain))`, and most lower it.
+
+- **Habitual lateness** is the only term with a visible signal. For a new
+  year it lowers the median error from
+  `r f2(lget("adopted (xY + xW)", LOYO, "mae"))` to
+  `r f2(lget("+ habitual lateness", LOYO, "mae"))` days and doubles the
+  within-year correlation
+  (`r f2(lget("adopted (xY + xW)", LOYO, "r_within"))` to
+  `r f2(lget("+ habitual lateness", LOYO, "r_within"))`). But the gain is in
+  small seasons: weighted by the catch, the error rises from
+  `r f2(lget("adopted (xY + xW)", LOYO, "mae_moth"))` to
+  `r f2(lget("+ habitual lateness", LOYO, "mae_moth"))` days, and the log
+  score, which counts every moth, falls. Separating the year errors from the
+  locality intercept makes it worse, not better. Habitual lateness is not
+  geographic either: latitude, longitude and elevation explain
+  `r sprintf("%.0f%%", 100 * lcs$hab_geo_r2)` of it over the
+  `r lcs$n_hab3` localities trapped in three years or more.
+- **Local temperature** has no detectable effect: a locality warmer than its
+  year by 1 °C over 15 June to 15 July flies
+  `r sprintf("%+.2f", cget("+ temperature Jun-Jul", "T_JunJul_W"))` days
+  later (`r sprintf("%+.2f", cget("+ temperature Jun-Jul", "T_JunJul_W", "lo"))`
+  to `r sprintf("%+.2f", cget("+ temperature Jun-Jul", "T_JunJul_W", "hi"))`).
+  The interval includes zero, and the sign is the opposite of development.
+  The local temperature anomalies are small (SD
+  `r f2(lcs$temp_W_sd[["T_JunJul_W"]])` °C) and carry the same CaSR
+  information that BioSIM's local departure already does not use.
+- **Catch** is the only term whose coefficient excludes zero: a locality
+  catching ten times more than its year flies
+  `r f2(abs(cget("+ catch", "log_total_W")))` days earlier
+  (`r sprintf("%+.2f", cget("+ catch", "log_total_W", "lo"))` to
+  `r sprintf("%+.2f", cget("+ catch", "log_total_W", "hi"))`). It does not
+  predict out of sample.
+- **Geography** adds parameters and nothing else.
+
+```{r}
+#| label: fig-local
+#| fig-cap: "The local component of the median catch date. Left: variance components before and after the adopted centre. Centre: correlation of the within-year residuals of two localities trapped in the same year, by distance (bars: 95% intervals from resampling years; dashed line: the correlation produced by centring within a year alone). Right: each year's north-south gradient of the median catch date, observed against BioSIM flight (years with six localities or more; dashed line: equality)."
+#| fig-width: 9
+#| fig-height: 3.4
+library(patchwork)
+vd <- lvc |>
+  mutate(model = factor(model, c("centre residual", "observed median")),
+         component = factor(component, c("year", "locality", "transient", "sampling")))
+pa <- ggplot(vd, aes(pmax(var, 0), model, fill = component)) +
+  geom_col(width = 0.6) +
+  scale_fill_manual(values = c(year = "grey20", locality = "grey50",
+                               transient = "grey75", sampling = "grey92"), name = NULL) +
+  labs(x = expression(Variance~(days^2)), y = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(),
+        legend.position = "bottom", legend.key.size = grid::unit(0.3, "cm"))
+pb <- ggplot(lc$correlogram, aes(km, r)) +
+  geom_hline(yintercept = 0, colour = "grey70") +
+  geom_hline(yintercept = mean(lc$correlogram$null), linetype = "dashed") +
+  geom_errorbar(aes(ymin = lo, ymax = hi), width = 0.04) +
+  geom_point(size = 2) +
+  scale_x_log10() +
+  labs(x = "Distance between localities (km)", y = "Correlation of residuals") +
+  theme_minimal(base_size = 10) + theme(panel.grid.minor = element_blank())
+pc <- ggplot(lc$gradients, aes(biosim_lat, obs_lat)) +
+  geom_hline(yintercept = 0, colour = "grey70") +
+  geom_abline(linetype = "dashed") +
+  geom_point(size = 2) +
+  coord_equal() +
+  labs(x = expression(BioSIM~flight~(days~per~degree*N)),
+       y = expression(Observed~(days~per~degree*N))) +
+  theme_minimal(base_size = 10) + theme(panel.grid.minor = element_blank())
+pa + pb + pc + plot_layout(widths = c(1.1, 1, 1))
+```
+
+## Conclusion
+
+The adopted predictor stays as it is. Its centre uncertainty
+(`r f1(fl_fit$sigma)` days) is mostly this local component, and that is an
+honest measure of what can be said about a locality in a given year from a
+development model, its temperatures and its catch.
+
+What the local component is remains open. Two explanations are consistent
+with the results so far:
+
+- **Temperature at the wrong scale.** CaSR temperature at about 10 km may not
+  resolve the conditions that set development at a trap. A test would need
+  station records near the traps.
+- **Moth movement.** Adult dispersal across the region would flatten the
+  north-south gradient of flight relative to local development, as observed
+  (`r sprintf("%+.2f", lcg$obs_lat_mean)` against
+  `r sprintf("%+.2f", lcg$biosim_lat_mean)` days per degree). It would also
+  make the pattern change with each year's winds rather than with
+  temperature, and would let late localities start their season as early as
+  the rest (@sec-asym-mech). A test would need the nightly series: whether a
+  locality's early catches track the regional flight rather than its own
+  development.
+
 # Next steps
 
-1. **The local component.** Every driver tried recovers the differences
-   between years and almost none of the differences between localities of the
-   same year (within-year slopes near 0.1). That, not the year signal, is
-   where the remaining error lies.
+1. **The origin of the local component** (@sec-local), if it matters for the
+   use of the predictor: station temperatures near the traps, or the nightly
+   series, to tell temperature at the wrong scale from moth movement.
 2. **Nightly variability**, if prediction intervals for single nights are
    wanted: a dispersion term on top of the seasonal curve.
