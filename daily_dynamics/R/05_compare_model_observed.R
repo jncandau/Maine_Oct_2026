@@ -38,7 +38,7 @@
 #         data/processed/pupal_phenology.rds
 # OUTPUT  data/processed/model_vs_observed.rds  one row per locality-year
 #
-# USAGE  source("R/05_compare_model_observed.R")   # from the project root
+# USAGE  source("daily_dynamics/R/05_compare_model_observed.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

@@ -50,7 +50,7 @@
 # RUNTIME  about ten minutes: the emergence requests are cached, the
 #          leave-one-year-out NB2 fits are the slow part.
 #
-# USAGE  source("R/12_flight_timing.R")   # from the project root
+# USAGE  source("daily_dynamics/R/12_flight_timing.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

@@ -1,6 +1,6 @@
 ---
 title: "Spruce budworm flight phenology in Maine"
-subtitle: "Analysis log"
+subtitle: "Daily dynamics — analysis log"
 author: "JN Candau"
 date: today
 date-format: "D MMMM YYYY"
@@ -24,8 +24,9 @@ knitr:
 
 ```{r}
 #| label: setup
-## Paths are written relative to the project root, not to analysis/.
-knitr::opts_knit$set(root.dir = normalizePath(".."))
+## Paths are written relative to the project root, not to
+## daily_dynamics/analysis/.
+knitr::opts_knit$set(root.dir = normalizePath(file.path("..", "..")))
 ```
 
 ```{r}
@@ -50,6 +51,15 @@ the document is rendered, so they cannot drift away from the files on disk.
 Code lives in `R/`, source data in `data/raw/`, processed tables in
 `data/processed/`. The project is version-controlled at
 <https://github.com/jncandau/Maine_Oct_2026>.
+
+
+**Project layout.** This log documents the *Daily dynamics* analysis: the
+night-by-night distribution of catches. It shares its dataset with a second
+analysis, *Seasonal dynamics* (`seasonal_dynamics/`). The data layer is common
+to both and sits at the project root — `R/01_read_trap_data.R`,
+`R/02_read_weather_data.R`, `R/functions/phenology.R` and `data/`. The scripts
+cited here as `R/03` to `R/14` and `R/functions/predict_flight.R` live under
+`daily_dynamics/R/`.
 
 # Trap data {#sec-traps}
 
@@ -2449,7 +2459,7 @@ needed to predict a locality-year that was never trapped;
 inputs and nothing else:
 
 ```r
-source("R/functions/predict_flight.R")
+source("daily_dynamics/R/functions/predict_flight.R")
 
 out <- predict_flight(
   dev_curve    = emergence_1978,   # data frame: doy, pct
@@ -2527,7 +2537,7 @@ the sharpened setting and takes `kappa = "logscore"` or a number to override.
 #| fig-cap: "Two locality-years predicted from their emergence curve, hourly temperature and season total, with the sharpened shape. Line: expected catch. Band: 90% negative binomial interval. Points: the observed catches, which the model never saw for these years. Counts are plotted plus one on a log scale."
 #| fig-width: 9
 #| fig-height: 4
-source(file.path("R", "functions", "predict_flight.R"))
+source(file.path("daily_dynamics", "R", "functions", "predict_flight.R"))
 library(ggplot2)
 
 wx_all <- readRDS(file.path("data", "processed", "weather_hourly.rds"))

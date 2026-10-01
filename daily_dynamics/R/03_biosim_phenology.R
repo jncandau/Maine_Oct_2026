@@ -65,7 +65,7 @@
 #          tens of minutes, and set `reuse_raw = TRUE` to avoid repeating the
 #          calls once they have succeeded.
 #
-# USAGE  source("R/03_biosim_phenology.R")   # from the project root
+# USAGE  source("daily_dynamics/R/03_biosim_phenology.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

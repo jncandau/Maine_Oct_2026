@@ -36,7 +36,7 @@
 # RUNTIME  a couple of minutes: kappa reuses the predictions of R/12 and only
 #          three final fits are made.
 #
-# USAGE  source("R/13_fit_flight_predictor.R")   # from the project root
+# USAGE  source("daily_dynamics/R/13_fit_flight_predictor.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

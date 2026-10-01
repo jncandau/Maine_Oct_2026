@@ -59,7 +59,7 @@
 #
 # RUNTIME  a few minutes, most of it the regional BioSIM requests (cached).
 #
-# USAGE  source("R/10_nightly_count_model.R")   # from the project root
+# USAGE  source("daily_dynamics/R/10_nightly_count_model.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

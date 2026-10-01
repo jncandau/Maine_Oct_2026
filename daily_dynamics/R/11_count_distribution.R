@@ -40,7 +40,7 @@
 # RUNTIME  a few minutes; the zero-inflated and lognormal fits are the slow
 #          ones.
 #
-# USAGE  source("R/11_count_distribution.R")   # from the project root
+# USAGE  source("daily_dynamics/R/11_count_distribution.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

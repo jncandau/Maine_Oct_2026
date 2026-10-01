@@ -2315,7 +2315,7 @@ vertical-align: -.125em;
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
 <h1 class="title">Spruce budworm flight phenology in Maine</h1>
-<p class="subtitle lead">Analysis log</p>
+<p class="subtitle lead">Daily dynamics — analysis log</p>
 </div>
 
 
@@ -2348,6 +2348,7 @@ vertical-align: -.125em;
 <h1 data-number="1"><span class="header-section-number">1</span> Purpose of this document</h1>
 <p>This is the running log of the analyses of spruce budworm (<em>Choristoneura fumiferana</em>) flight phenology from daily light-trap catches in Maine. Each section records what was done, the choices that were made and why, and the state of the data or the model that resulted. It is updated as the work proceeds; the numbers below are recomputed from the processed data every time the document is rendered, so they cannot drift away from the files on disk.</p>
 <p>Code lives in <code>R/</code>, source data in <code>data/raw/</code>, processed tables in <code>data/processed/</code>. The project is version-controlled at <a href="https://github.com/jncandau/Maine_Oct_2026" class="uri">https://github.com/jncandau/Maine_Oct_2026</a>.</p>
+<p><strong>Project layout.</strong> This log documents the <em>Daily dynamics</em> analysis: the night-by-night distribution of catches. It shares its dataset with a second analysis, <em>Seasonal dynamics</em> (<code>seasonal_dynamics/</code>). The data layer is common to both and sits at the project root — <code>R/01_read_trap_data.R</code>, <code>R/02_read_weather_data.R</code>, <code>R/functions/phenology.R</code> and <code>data/</code>. The scripts cited here as <code>R/03</code> to <code>R/14</code> and <code>R/functions/predict_flight.R</code> live under <code>daily_dynamics/R/</code>.</p>
 </section>
 <section id="sec-traps" class="level1" data-number="2">
 <h1 data-number="2"><span class="header-section-number">2</span> Trap data</h1>
@@ -6580,7 +6581,7 @@ Table 55: The forecast as it stands
 <section id="sec-predictor" class="level1" data-number="11">
 <h1 data-number="11"><span class="header-section-number">11</span> A callable predictor</h1>
 <p><code>R/13_fit_flight_predictor.R</code> fits the model on every year and stores what is needed to predict a locality-year that was never trapped; <code>R/functions/predict_flight.R</code> consumes it. The call takes the three forecast inputs and nothing else:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">&quot;R/functions/predict_flight.R&quot;</span>)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">&quot;daily_dynamics/R/functions/predict_flight.R&quot;</span>)</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>out <span class="ot">&lt;-</span> <span class="fu">predict_flight</span>(</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">dev_curve    =</span> emergence_1978,   <span class="co"># data frame: doy, pct</span></span>

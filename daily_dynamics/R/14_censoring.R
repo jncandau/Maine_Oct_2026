@@ -41,7 +41,7 @@ library(dplyr)
 library(splines)
 
 source(file.path("R", "functions", "phenology.R"))
-source(file.path("R", "functions", "predict_flight.R"))
+source(file.path("daily_dynamics", "R", "functions", "predict_flight.R"))
 
 
 ## ---- 1. Inputs ---------------------------------------------------------------

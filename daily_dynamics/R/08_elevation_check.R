@@ -32,7 +32,7 @@
 # OUTPUT  data/processed/locality_elevation.rds  Location, elev_m
 #         data/processed/elevation_check.rds     list(preview, scan, coords)
 #
-# USAGE  source("R/08_elevation_check.R")   # from the project root
+# USAGE  source("daily_dynamics/R/08_elevation_check.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

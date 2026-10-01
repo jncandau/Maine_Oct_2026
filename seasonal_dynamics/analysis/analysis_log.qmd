@@ -1,0 +1,133 @@
+---
+title: "Spruce budworm flight phenology in Maine"
+subtitle: "Seasonal dynamics — analysis log"
+author: "JN Candau"
+date: today
+date-format: "D MMMM YYYY"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    embed-resources: true
+    code-fold: true
+    code-summary: "Show code"
+    theme: cosmo
+execute:
+  echo: false
+  warning: false
+  message: false
+knitr:
+  opts_chunk:
+    comment: "#>"
+---
+
+```{r}
+#| label: setup
+## Paths are written relative to the project root, not to
+## seasonal_dynamics/analysis/.
+knitr::opts_knit$set(root.dir = normalizePath(file.path("..", "..")))
+```
+
+```{r}
+#| label: data
+library(dplyr)
+library(knitr)
+library(ggplot2)
+
+trap_records <- readRDS(file.path("data", "processed", "trap_records.rds"))
+season       <- readRDS(file.path("data", "processed", "seasonal",
+                                  "season_percentiles.rds"))
+```
+
+# Purpose of this document
+
+This is the running log of the *Seasonal dynamics* analysis of spruce budworm
+(*Choristoneura fumiferana*) light-trap catches in Maine. Where the *Daily
+dynamics* analysis (`daily_dynamics/`) models the catch night by night, this
+one treats each locality-year as a single observation — when its flight season
+was centred, how long it lasted and how it was shaped — and asks how those
+quantities depend on temperature.
+
+The two analyses share one dataset. Its rules are set once, in the data layer
+at the project root (`R/01_read_trap_data.R`, `R/02_read_weather_data.R`), and
+hold identically here:
+
+- the season of each year runs from the first to the last night on which any
+  trap caught a moth that year;
+- a `-` cell inside that window is a night the trap ran and caught nothing,
+  i.e. a zero;
+- an `m` cell is a night whose count was lost, and stays missing;
+- one record (Elliotsville Township 1978) is excluded because its only missing
+  nights fell at the peak of its season.
+
+Nothing in this analysis reads an output of `daily_dynamics/`.
+
+# The season-level data {#sec-season}
+
+`seasonal_dynamics/R/01_season_percentiles.R` reduces each record to one row.
+The percentiles come from the cumulative catch over the counted nights,
+computed with the project's shared helper (`R/functions/phenology.R`), so they
+are identical to those used in the daily analysis.
+
+```{r}
+#| label: tbl-season-overview
+#| tbl-cap: "The season-level response table"
+q <- function(x, d = 1) sprintf(paste0("%.", d, "f (%.", d, "f to %.", d, "f)"),
+                                stats::median(x), min(x), max(x))
+tibble::tibble(
+  Quantity = c("Locality-years", "Localities", "Years",
+               "Usable for phenology",
+               "Median catch date, DOY: median (range)",
+               "Central 90% of the season, d",
+               "Central 50% of the season, d",
+               "Asymmetry, d (positive = longer decline)",
+               "Share of the season on the peak night",
+               "Records with right-censored nights"),
+  Value = c(nrow(season), n_distinct(season$locality), n_distinct(season$year),
+            sum(season$usable_phenology),
+            q(season$p50), q(season$width90), q(season$width50),
+            q(season$asymmetry), q(season$peak_share, 2),
+            sum(season$n_cens_right > 0))
+) |>
+  kable(align = c("l", "r"))
+```
+
+```{r}
+#| label: fig-season-years
+#| fig-cap: "Flight season of every locality-year, by year. Point: median catch date; bar: central 90% of the catch (p05 to p95). Records within a year are ordered by latitude, south to north."
+#| fig-width: 9
+#| fig-height: 4.5
+season |>
+  group_by(year) |>
+  mutate(offset = (rank(latitude, ties.method = "first") - (n() + 1) / 2) /
+           (n() + 1) * 0.8) |>
+  ungroup() |>
+  ggplot(aes(x = year + offset)) +
+  geom_linerange(aes(ymin = p05, ymax = p95), colour = "grey60",
+                 linewidth = 0.4) +
+  geom_point(aes(y = p50, colour = latitude), size = 1.2) +
+  ## plotmath, because the render locale mangles a literal degree sign
+  scale_colour_viridis_c(name = expression(Latitude~(degree*N)), option = "D") +
+  labs(x = "Year", y = "Day of year") +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank())
+```
+
+The year-to-year spread of the median catch date dwarfs the spread within a
+year: the medians of a given year cluster within a few days of each other,
+while the year means range over
+`r sprintf("%.0f", diff(range(tapply(season$p50, season$year, mean))))` days.
+That pattern, already central to the daily analysis, sets the problem for this
+one: a seasonal model must first explain the differences between years, and
+only then the much smaller differences between localities within a year.
+
+# Next steps
+
+1. **Temperature summaries per locality-year**, from the hourly series of the
+   shared weather layer: degree-days above a range of base temperatures
+   accumulated from a range of start dates, and mean temperatures over fixed
+   calendar windows, computed both at the trap and averaged over the network.
+2. **Models of p50, then of width and asymmetry**, as functions of those
+   summaries, separating the between-year from the within-year component and
+   scored by leave-one-year-out and leave-one-locality-out prediction.

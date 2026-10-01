@@ -37,7 +37,7 @@
 # RUNTIME  a few minutes -- one dev_days() call and `n_reps` BioSIM requests
 #          per year. `reuse` keeps both.
 #
-# USAGE  source("R/09_regional_weather_test.R")   # from the project root
+# USAGE  source("daily_dynamics/R/09_regional_weather_test.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

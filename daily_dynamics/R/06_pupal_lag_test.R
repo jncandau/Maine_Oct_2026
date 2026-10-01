@@ -36,7 +36,7 @@
 #          the whole (base, K) grid and the cross-validation then only selects
 #          from that array.
 #
-# USAGE  source("R/06_pupal_lag_test.R")   # from the project root
+# USAGE  source("daily_dynamics/R/06_pupal_lag_test.R")   # from the project root
 # =============================================================================
 
 library(dplyr)

@@ -28,7 +28,7 @@
 #   1 (no sharpening); a number applies it directly.
 #
 # USAGE
-#   source("R/functions/predict_flight.R")
+#   source("daily_dynamics/R/functions/predict_flight.R")
 #   out <- predict_flight(dev_curve    = emergence_1978,
 #                         hourly_temp  = weather_1978,
 #                         season_total = 12000,

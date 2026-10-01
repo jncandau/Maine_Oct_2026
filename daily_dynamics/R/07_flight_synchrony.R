@@ -37,7 +37,7 @@
 # OUTPUT  data/processed/flight_synchrony.rds
 #           list(gradients, gaps, pairs, null_draws, summary)
 #
-# USAGE  source("R/07_flight_synchrony.R")   # from the project root
+# USAGE  source("daily_dynamics/R/07_flight_synchrony.R")   # from the project root
 # =============================================================================
 
 library(dplyr)
