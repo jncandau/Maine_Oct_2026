@@ -54,6 +54,11 @@
 #   trap_records.rds  one row per trapping record, with sampling effort and the
 #                     annual total as reported in the workbook
 #   trap_daily.rds    one row per trap-night actually sampled, with the count
+#   trap_season_totals.rds  every record of the selection BEFORE the catch
+#                     threshold and the hand exclusions (one row per record:
+#                     season total, whether it has a daily series, whether it
+#                     was retained), for analyses of population level that
+#                     must see the small seasons too
 #
 # REQUIREMENTS
 #   readODS, readr, dplyr, tidyr. If missing from the project library:
@@ -379,6 +384,13 @@ trap_records <- trap_records %>%
 ## Records are dropped here, not in section 3, because the threshold is applied
 ## to the season total, which is only known once the daily cells are read.
 
+## Season totals of every record before the threshold, kept for analyses of
+## population level (the threshold selects on the very quantity they study).
+trap_season_totals <- trap_records %>%
+  transmute(flightID, year, locality, latitude, longitude, has_daily, n_nights,
+            season_total,
+            retained = season_total > min_season_total & !flightID %in% exclude_records)
+
 dropped_small <- trap_records %>%
   filter(season_total <= min_season_total | is.na(season_total)) %>%
   select(flightID, year, locality, has_daily, n_nights, season_total)
@@ -526,6 +538,7 @@ dir.create(file.path("data", "processed"), showWarnings = FALSE, recursive = TRU
 saveRDS(trap_records, file.path("data", "processed", "trap_records.rds"))
 saveRDS(trap_daily,   file.path("data", "processed", "trap_daily.rds"))
 saveRDS(trap_excluded, file.path("data", "processed", "trap_excluded.rds"))
+saveRDS(trap_season_totals, file.path("data", "processed", "trap_season_totals.rds"))
 
 message(sprintf(
   paste0("Trap data read: %d records (%s, %s, %d-%d, season total > %d) ",

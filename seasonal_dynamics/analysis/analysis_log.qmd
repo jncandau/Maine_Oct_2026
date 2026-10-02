@@ -1421,6 +1421,176 @@ this small, a run of nights sharing a warm spell could produce apparent skew
 that a wider null would absorb. Revisiting @sec-asym-mech with this
 dispersion, rather than the multinomial, is unfinished.
 
+# Population levels {#sec-poplevel}
+
+```{r}
+#| label: pop-data
+pc  <- readRDS(file.path("data", "processed", "seasonal", "population_classes.rds"))
+pcs <- pc$summary; pct <- pc$tests; pcf <- pc$fit2; pcv <- pc$variance
+pd  <- pc$data
+tget <- function(set, col) pct[[col]][pct$set == set]
+S_POS <- "positive totals, log10"; S_ALL <- "all totals, log10(total + 1)"
+S_EFF <- "daily series >= 20 nights, log10"
+bic_pos <- pc$bic |> filter(set == S_POS)
+dbic <- max(bic_pos$BIC[bic_pos$G == 2]) - max(bic_pos$BIC[bic_pos$G == 1])
+fget <- function(cl, col) pcf[[col]][pcf$class == cl]
+eff <- pd |> filter(has_daily, season_total > 0) |> group_by(class) |>
+  summarise(nights = median(n_nights), .groups = "drop")
+pvar <- function(k, col = "share") pcv[[col]][pcv$component == k]
+## Depth of the trough of the fitted mixture: its density at the lowest point
+## between the two component means, relative to the lower of its two peaks.
+mix_dens <- function(x) pcf$prop[1] * stats::dnorm(x, pcf$mean_log[1], pcf$sd_log[1]) +
+  pcf$prop[2] * stats::dnorm(x, pcf$mean_log[2], pcf$sd_log[2])
+xg <- seq(pcf$mean_log[1], pcf$mean_log[2], by = 0.005)
+trough_x <- xg[which.min(mix_dens(xg))]
+peak_lo <- min(stats::optimize(mix_dens, c(min(xg), trough_x), maximum = TRUE)$objective,
+               stats::optimize(mix_dens, c(trough_x, max(xg)), maximum = TRUE)$objective)
+trough_rel <- mix_dens(trough_x) / peak_lo
+```
+
+Can the season totals be split into two classes, low and high population
+level? The question has to be asked of **every** record, not only of the
+analysis set, because the 99-moth threshold of `R/01` selects on the season
+total itself. `R/01` now also writes `trap_season_totals.rds`: all
+`r pcs$n` Maine light-trap records of 1968–1989 before the threshold
+(`r pcs$n_daily` with a daily series, `r pcs$n_total_only` with a season
+total only), `r pcs$n_retained` of which are retained for the analyses
+above. `r pcs$n_zero` records caught no moth at all. They form a point mass
+that no continuous distribution describes, so they are set aside and
+reported with the year table
+(`seasonal_dynamics/R/10_population_classes.R`).
+
+Three tests were applied to the log10 season totals:
+
+- Hartigan's **dip test**, which asks whether the distribution has more than
+  one mode;
+- **Gaussian mixtures** of one to four components, compared by BIC;
+- a **bootstrap likelihood-ratio test** (`r pcs$n_boot` resamples) of one
+  component against two, and two against three.
+
+```{r}
+#| label: tbl-pop-tests
+#| tbl-cap: "Tests for two population classes in the log10 season total. Dip: Hartigan's test of unimodality. Mixture: number of Gaussian components preferred by BIC (E: equal, V: unequal variances). LRT: bootstrap likelihood-ratio test"
+pct |>
+  transmute(Records = set, n,
+            `Dip p` = sprintf("%.3f", dip_p),
+            `BIC components` = sprintf("%d (%s)", best_G, best_model),
+            `LRT 1 vs 2, p` = sprintf("%.3f", lrt_1v2_p),
+            `LRT 2 vs 3, p` = ifelse(is.na(lrt_2v3_p), "-", sprintf("%.3f", lrt_2v3_p))) |>
+  kable(align = c("l", "r", "r", "r", "r", "r"))
+```
+
+**The mixture models favour two components, but there are not two modes.**
+On the `r tget(S_POS, "n")` positive totals, BIC prefers two components to
+one by `r sprintf("%.0f", dbic)` units, and the bootstrap rejects one
+component (p = `r sprintf("%.3f", tget(S_POS, "lrt_1v2_p"))`) but not two
+(p = `r sprintf("%.2f", tget(S_POS, "lrt_2v3_p"))` for a third). The fitted mixture has two peaks and a trough between them, at about
+`r sprintf("%.0f", round(10^trough_x, -1))` moths (@fig-pop, left). But the
+trough is shallow: the density there is
+`r sprintf("%.0f%%", 100 * trough_rel)` of the lower peak. The dip test, the
+direct test of two modes in the data rather than in a fitted model, does not
+reject a single mode (p = `r sprintf("%.3f", tget(S_POS, "dip_p"))`). The
+components are:
+
+- **low**: median `r sprintf("%.0f", fget("low", "median_moths"))` moths,
+  SD `r sprintf("%.2f", fget("low", "sd_log"))` log units,
+  `r sprintf("%.0f%%", 100 * fget("low", "prop"))` of seasons;
+- **high**: median `r sprintf("%.0f", fget("high", "median_moths"))` moths,
+  SD `r sprintf("%.2f", fget("high", "sd_log"))` log units,
+  `r sprintf("%.0f%%", 100 * fget("high", "prop"))` of seasons.
+
+One component is broad and the other narrow. Such a pair also describes a
+single skewed distribution, a long tail of small catches below a
+concentration of large ones. A mixture can prefer two components without the
+data holding two populations, so the evidence for two classes is suggestive,
+not conclusive.
+
+**Part of the low tail is trapping effort.** Among records with a daily
+series, the log season total correlates
+`r sprintf("%.2f", pcs$cor_nights)` with the log number of nights trapped.
+Low-class records were trapped for a median of
+`r eff$nights[eff$class == "low"]` nights, against
+`r eff$nights[eff$class == "high"]` for high-class records. Restricted to the
+`r tget(S_EFF, "n")` records trapped `r pcs$min_nights` nights or more, the
+distribution is plainly unimodal (dip p = `r sprintf("%.2f", tget(S_EFF, "dip_p"))`).
+Including the zero seasons makes the dip test significant
+(p `r ifelse(tget(S_ALL, "dip_p") < 0.001, "< 0.001", sprintf("= %.3f", tget(S_ALL, "dip_p")))`),
+but only because of the spike of `r pcs$n_zero` zeros. It is not evidence of
+a second population.
+
+**The population level is mostly a property of the year.** Of the variance in
+log10(total + 1), the year accounts for
+`r sprintf("%.0f%%", 100 * pvar("year"))`, the locality for
+`r sprintf("%.0f%%", 100 * pvar("locality"))`, and the locality-year
+remainder for `r sprintf("%.0f%%", 100 * pvar("locality-year"))`
+(@fig-pop, right). The years trace the outbreak cycle continuously rather
+than in two states:
+
+- 1968–1970: medians of 12–19 moths, no high seasons;
+- 1971–1973: rising;
+- 1974–1975 and 1978–1983: most traps in the high class;
+- 1984–1986: falling;
+- 1987–1989: most traps catching nothing.
+
+```{r}
+#| label: fig-pop
+#| fig-cap: "Season totals of all Maine light-trap records, 1968-1989, before the 99-moth threshold. Left: distribution of the log10 total of seasons with at least one moth, with the two-component mixture (dashed: components; solid: their sum); vertical lines: the 99-moth threshold (dotted) and the boundary where a season is equally likely to belong to either component (dashed). Centre: the same for records trapped at least 20 nights. Right: every record by year (zero seasons plotted at 0), with the year median."
+#| fig-width: 9
+#| fig-height: 3.4
+library(patchwork)
+mix_curve <- function(x) {
+  comp <- lapply(seq_len(nrow(pcf)), function(k)
+    pcf$prop[k] * stats::dnorm(x, pcf$mean_log[k], pcf$sd_log[k]))
+  tibble::tibble(x = x, low = comp[[1]], high = comp[[2]], total = comp[[1]] + comp[[2]])
+}
+mc <- mix_curve(seq(-0.2, 5.2, by = 0.02))
+pos <- pd |> filter(season_total > 0)
+vlines <- list(geom_vline(xintercept = log10(100), linetype = "dotted"),
+               geom_vline(xintercept = pcs$boundary_log, linetype = "dashed"))
+xlab <- expression(log[10]~season~total)
+pa <- ggplot(pos, aes(log_total)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 0.25, boundary = 0,
+                 fill = "grey80", colour = "white") +
+  geom_line(data = mc, aes(x, low), linetype = "dashed") +
+  geom_line(data = mc, aes(x, high), linetype = "dashed") +
+  geom_line(data = mc, aes(x, total)) + vlines +
+  labs(x = xlab, y = "Density", title = sprintf("All seasons with moths (n = %d)", nrow(pos))) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(), plot.title = element_text(size = 9))
+pb <- ggplot(filter(pos, has_daily, n_nights >= pcs$min_nights), aes(log_total)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 0.25, boundary = 0,
+                 fill = "grey80", colour = "white") + vlines +
+  labs(x = xlab, y = NULL,
+       title = sprintf("Trapped >= %d nights (n = %d)", pcs$min_nights,
+                       sum(pos$has_daily & pos$n_nights >= pcs$min_nights))) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(), plot.title = element_text(size = 9))
+pcy <- ggplot(pd, aes(year, log_total1)) +
+  geom_jitter(width = 0.2, height = 0, size = 0.8, colour = "grey50") +
+  geom_line(data = pc$by_year, aes(year, log10(median_total + 1))) +
+  geom_hline(yintercept = log10(100), linetype = "dotted") +
+  labs(x = NULL, y = expression(log[10]~(season~total+1)), title = "By year") +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(), plot.title = element_text(size = 9))
+pa + pb + pcy + plot_layout(widths = c(1, 1, 1.2))
+```
+
+**Conclusion.** The evidence that the season totals fall into two natural
+classes is weak. There is a shallow trough near
+`r sprintf("%.0f", round(10^trough_x, -1))` moths, but it does not
+pass the test for two modes, and it disappears when trapping effort is
+controlled. The totals read better as a single skewed continuum, most of it
+ordered by the year of the outbreak cycle. A two-class split can still be imposed as a convenience. The
+mixture boundary, at about `r sprintf("%.0f", round(pcs$boundary_moths, -1))`
+moths per season, is the defensible place for it:
+`r sprintf("%.0f%%", 100 * pcs$certain_share)` of seasons fall on one side
+with posterior probability of at least 0.9. That boundary sits well above the
+99-moth threshold of `R/01`: `r pcs$low_above_99` of the
+`r pcs$n_retained` retained seasons fall in the low class, and all
+`r pcs$high_retained` high seasons are retained. Because a season's level
+is largely set by its year, a classification by outbreak phase would carry
+most of the same information.
+
 # Next steps
 
 1. **The origin of the local component** (@sec-local), if it matters for the
